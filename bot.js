@@ -29,6 +29,7 @@ if (!ADMIN_PASSWORD) {
 }
 
 console.log("✅ Environment variables loaded successfully");
+console.log(`🔑 Admin password set: ${ADMIN_PASSWORD ? 'Yes' : 'No'}`);
 
 // =========================
 // INIT BOT
@@ -212,23 +213,34 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// =========================
+// SESSION CONFIGURATION - FIXED
+// =========================
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
+    secret: process.env.SESSION_SECRET || 'your-secret-key-change-this-to-something-random',
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
     cookie: { 
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    }
+        secure: false,
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000,
+        sameSite: 'lax'
+    },
+    name: 'telegram_bot_session'
 }));
 
 // =========================
-// AUTHENTICATION
+// AUTHENTICATION WITH LOGGING
 // =========================
 function isAuthenticated(req, res, next) {
-    if (req.session.isAdmin) {
+    console.log('🔍 Auth check - Session:', req.session);
+    console.log('🔍 Auth check - isAdmin:', req.session?.isAdmin);
+    
+    if (req.session && req.session.isAdmin) {
+        console.log('✅ Authenticated, proceeding');
         next();
     } else {
+        console.log('❌ Not authenticated, redirecting to login');
         res.redirect('/login');
     }
 }
@@ -248,28 +260,73 @@ app.get('/health', (req, res) => {
 });
 
 // =========================
-// WEB ROUTES
+// LOGIN ROUTES - FIXED
 // =========================
 app.get('/login', (req, res) => {
+    // Clear any existing session first
+    if (req.session) {
+        req.session.isAdmin = false;
+    }
     res.render('login', { error: null });
 });
 
 app.post('/login', (req, res) => {
     const { password } = req.body;
-    if (password === ADMIN_PASSWORD) {
+    console.log(`🔐 Login attempt with password: ${password}`);
+    console.log(`🔐 Expected password: ${ADMIN_PASSWORD}`);
+    
+    // Trim both to avoid whitespace issues
+    const trimmedPassword = password ? password.trim() : '';
+    const trimmedAdminPassword = ADMIN_PASSWORD ? ADMIN_PASSWORD.trim() : '';
+    
+    if (trimmedPassword === trimmedAdminPassword) {
         req.session.isAdmin = true;
-        res.redirect('/dashboard');
+        console.log('✅ Login successful! Session created.');
+        console.log('Session ID:', req.sessionID);
+        console.log('Session data:', req.session);
+        
+        // Force save session before redirect
+        req.session.save((err) => {
+            if (err) {
+                console.error('Session save error:', err);
+                return res.render('login', { error: 'Session error, please try again' });
+            }
+            console.log('✅ Session saved successfully');
+            res.redirect('/dashboard');
+        });
     } else {
+        console.log('❌ Login failed - password mismatch');
         res.render('login', { error: 'Invalid password' });
     }
 });
 
 app.get('/logout', (req, res) => {
-    req.session.destroy();
-    res.redirect('/login');
+    req.session.destroy((err) => {
+        if (err) {
+            console.error('Logout error:', err);
+        }
+        res.redirect('/login');
+    });
 });
 
+// =========================
+// DEBUG ROUTE
+// =========================
+app.get('/debug-session', (req, res) => {
+    res.json({
+        sessionID: req.sessionID,
+        session: req.session,
+        isAdmin: req.session?.isAdmin || false,
+        headers: req.headers,
+        cookies: req.headers.cookie || 'No cookies'
+    });
+});
+
+// =========================
+// DASHBOARD ROUTE
+// =========================
 app.get('/dashboard', isAuthenticated, async (req, res) => {
+    console.log('📊 Dashboard accessed, session:', req.session.isAdmin);
     try {
         const today = new Date().toISOString().split('T')[0];
         const currentMonth = today.substring(0, 7);
@@ -487,6 +544,7 @@ function startExpressServer() {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`🌐 Admin panel running on port ${PORT}`);
         console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+        console.log(`🔗 Debug session: http://localhost:${PORT}/debug-session`);
     });
 }
 
