@@ -537,6 +537,147 @@ app.post('/api/clear', isAuthenticated, async (req, res) => {
 });
 
 // =========================
+// ADD NEW RECORD (POST)
+// =========================
+app.post('/api/record', isAuthenticated, async (req, res) => {
+    try {
+        if (!isMongoConnected) {
+            return res.status(503).json({ error: 'MongoDB not connected' });
+        }
+
+        const {
+            wsAccount,
+            platformAccount,
+            todayDeposit,
+            monthDeposit,
+            joinDate,
+            ipStatus,
+            developer,
+            receptionist,
+            senderName,
+            rawMessage
+        } = req.body;
+
+        // Validate required fields
+        if (!platformAccount) {
+            return res.status(400).json({ error: 'Platform account is required' });
+        }
+
+        // Check for duplicate
+        const existing = await Record.findOne({ platformAccount });
+        if (existing) {
+            return res.status(400).json({ error: 'Platform account already exists' });
+        }
+
+        const now = new Date();
+        const collectionDate = now.toISOString().split('T')[0];
+        const collectionMonth = collectionDate.substring(0, 7);
+
+        const record = new Record({
+            wsAccount: wsAccount || '',
+            platformAccount: platformAccount,
+            todayDeposit: parseInt(todayDeposit) || 0,
+            monthDeposit: parseInt(monthDeposit) || 0,
+            joinDate: joinDate || '',
+            ipStatus: ipStatus || '正常',
+            developer: developer || '',
+            receptionist: receptionist || '',
+            senderName: senderName || 'Admin',
+            senderId: 0,
+            rawMessage: rawMessage || `Manual entry: ${platformAccount}`,
+            collectionDate: collectionDate,
+            collectionMonth: collectionMonth
+        });
+
+        await record.save();
+        accountSet.add(platformAccount);
+        
+        res.json({ success: true, message: 'Record added successfully', record });
+    } catch (err) {
+        console.error('Error adding record:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// =========================
+// GET SINGLE RECORD
+// =========================
+app.get('/api/record/:id', isAuthenticated, async (req, res) => {
+    try {
+        if (!isMongoConnected) {
+            return res.status(503).json({ error: 'MongoDB not connected' });
+        }
+
+        const record = await Record.findById(req.params.id);
+        if (!record) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+        res.json(record);
+    } catch (err) {
+        console.error('Error fetching record:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// =========================
+// UPDATE RECORD (PUT)
+// =========================
+app.put('/api/record/:id', isAuthenticated, async (req, res) => {
+    try {
+        if (!isMongoConnected) {
+            return res.status(503).json({ error: 'MongoDB not connected' });
+        }
+
+        const {
+            wsAccount,
+            platformAccount,
+            todayDeposit,
+            monthDeposit,
+            joinDate,
+            ipStatus,
+            developer,
+            receptionist,
+            senderName,
+            rawMessage
+        } = req.body;
+
+        if (!platformAccount) {
+            return res.status(400).json({ error: 'Platform account is required' });
+        }
+
+        const record = await Record.findById(req.params.id);
+        if (!record) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        // If platform account is changing, update the set
+        if (record.platformAccount !== platformAccount) {
+            accountSet.delete(record.platformAccount);
+            accountSet.add(platformAccount);
+        }
+
+        // Update fields
+        record.wsAccount = wsAccount || '';
+        record.platformAccount = platformAccount;
+        record.todayDeposit = parseInt(todayDeposit) || 0;
+        record.monthDeposit = parseInt(monthDeposit) || 0;
+        record.joinDate = joinDate || '';
+        record.ipStatus = ipStatus || '正常';
+        record.developer = developer || '';
+        record.receptionist = receptionist || '';
+        record.senderName = senderName || 'Admin';
+        record.rawMessage = rawMessage || record.rawMessage;
+
+        await record.save();
+        
+        res.json({ success: true, message: 'Record updated successfully', record });
+    } catch (err) {
+        console.error('Error updating record:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// =========================
 // START EXPRESS SERVER
 // =========================
 function startExpressServer() {
