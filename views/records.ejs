@@ -268,7 +268,7 @@
         <!-- Navigation -->
         <nav class="navbar">
             <div class="nav-left">
-                <h2>All Records</h2>
+                <h2>📋 All Records</h2>
                 <a href="/dashboard" class="back-link">← Back to Dashboard</a>
                 <span class="record-count" id="recordCount">Loading...</span>
             </div>
@@ -279,10 +279,10 @@
 
         <!-- Search -->
         <div class="search-section">
-            <input type="text" id="searchInput" placeholder=" Search by Ws账号, 平台账号, 推接待, or 开发..." 
+            <input type="text" id="searchInput" placeholder="🔍 Search by Ws账号, 平台账号, 推接待, or 开发..." 
                    onkeypress="if(event.key==='Enter') searchRecords()">
-            <button id="searchBtn" class="btn btn-primary" onclick="searchRecords()"> Search</button>
-            <button class="btn btn-primary" onclick="resetSearch()" style="background:#6c757d;">Reset</button>
+            <button id="searchBtn" class="btn btn-primary" onclick="searchRecords()">🔍 Search</button>
+            <button class="btn btn-primary" onclick="resetSearch()" style="background:#6c757d;">🔄 Reset</button>
         </div>
 
         <!-- Records Table -->
@@ -391,7 +391,6 @@
                 const startIndex = (currentPage - 1) * limit;
                 const num = startIndex + index + 1;
                 
-                const ipClass = r.ipStatus && r.ipStatus.toLowerCase().includes('正常') ? 'ip-normal' : 'ip-abnormal';
                 const ipBadge = r.ipStatus && r.ipStatus.toLowerCase().includes('正常') 
                     ? '<span class="badge badge-success">✓ 正常</span>' 
                     : '<span class="badge badge-danger">⚠ 异常</span>';
@@ -409,7 +408,7 @@
                         <td><span class="truncate" title="${r.developer || ''}">${r.developer || '-'}</span></td>
                         <td><span class="truncate" title="${r.senderName || ''}">${r.senderName || '-'}</span></td>
                         <td>
-                            <button class="btn-delete" data-id="${r._id}" title="Delete record">delete</button>
+                            <button class="btn-delete" data-id="${r._id}" title="Delete record">🗑️</button>
                         </td>
                     </tr>
                 `;
@@ -426,12 +425,10 @@
             
             let html = '';
             
-            // Previous button
             if (currentPage > 1) {
                 html += `<button class="page-btn" data-page="${currentPage - 1}">‹ Prev</button>`;
             }
             
-            // Page numbers
             const startPage = Math.max(1, currentPage - 2);
             const endPage = Math.min(totalPages, currentPage + 2);
             
@@ -449,7 +446,6 @@
                 html += `<button class="page-btn" data-page="${totalPages}">${totalPages}</button>`;
             }
             
-            // Next button
             if (currentPage < totalPages) {
                 html += `<button class="page-btn" data-page="${currentPage + 1}">Next ›</button>`;
             }
@@ -499,19 +495,11 @@
                 const page = parseInt(e.target.dataset.page);
                 if (!isNaN(page)) {
                     if (currentQuery) {
-                        // If searching, maintain search
                         searchRecords();
                     } else {
                         loadRecords(page);
                     }
                 }
-            }
-        });
-
-        // Enter key for search
-        document.getElementById('searchInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                searchRecords();
             }
         });
 
