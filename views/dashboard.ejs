@@ -10,14 +10,14 @@
     <div class="container">
         <!-- Navigation -->
         <nav class="navbar">
-<div class="nav-left">
-    <h2>Bot Admin</h2>
-    <span class="status-badge <%= status %>">● <%= status %></span>
-    <a href="/records" class="back-link" style="margin-left:10px;">All Records</a>
-</div>
+            <div class="nav-left">
+                <h2>🤖 Bot Admin</h2>
+                <span class="status-badge <%= status %>">● <%= status %></span>
+                <a href="/records" class="back-link" style="margin-left:10px;">📋 All Records</a>
+            </div>
             <div class="nav-right">
                 <span class="time-display" id="currentTime"></span>
-                <a href="/logout" class="logout-btn">Logout</a>
+                <a href="/logout" class="logout-btn">🚪 Logout</a>
             </div>
         </nav>
 
@@ -25,30 +25,30 @@
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-content">
-                    <h3>Total Records</h3>
+                    <h3>📊 Total Records</h3>
                     <p class="stat-number"><%= totalRecords %></p>
                     <span class="stat-change">All time</span>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-content">
-                    <h3>Unique Accounts</h3>
+                    <h3>👤 Unique Accounts</h3>
                     <p class="stat-number"><%= uniqueAccounts %></p>
                     <span class="stat-change">Unique platform users</span>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-content">
-                    <h3>Today's Records</h3>
+                    <h3>📅 Today's Records</h3>
                     <p class="stat-number"><%= todayRecords %></p>
-                    <span class="stat-change"> $<%= todayDeposit %> deposit</span>
+                    <span class="stat-change">💰 $<%= todayDeposit %> deposit</span>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-content">
-                    <h3>This Month</h3>
+                    <h3>📆 This Month</h3>
                     <p class="stat-number"><%= monthRecords %></p>
-                    <span class="stat-change"> $<%= monthDeposit %> deposit</span>
+                    <span class="stat-change">💰 $<%= monthDeposit %> deposit</span>
                 </div>
             </div>
         </div>
@@ -58,16 +58,16 @@
             <div class="panel-header">
                 <h3>🎮 Control Panel</h3>
                 <% if (collectionStartTime) { %>
-                    <span class="running-time"> Running: <%= Math.floor((Date.now() - new Date(collectionStartTime).getTime()) / 1000 / 60) %> min</span>
+                    <span class="running-time">⏱️ Running: <%= Math.floor((Date.now() - new Date(collectionStartTime).getTime()) / 1000 / 60) %> min</span>
                 <% } %>
             </div>
             <div class="panel-actions">
                 <button id="toggleBtn" class="btn <%= status === 'active' ? 'btn-danger' : 'btn-success' %>">
-                    <%= status === 'active' ? ' Stop Collection' : ' Start Collection' %>
+                    <%= status === 'active' ? '⏹️ Stop Collection' : '▶️ Start Collection' %>
                 </button>
-                <button id="refreshBtn" class="btn btn-primary"> Refresh</button>
-                <button id="exportBtn" class="btn btn-info"> Export CSV</button>
-                <button id="clearBtn" class="btn btn-warning"> Clear Data</button>
+                <button id="refreshBtn" class="btn btn-primary">🔄 Refresh</button>
+                <button id="exportBtn" class="btn btn-info">📥 Export CSV</button>
+                <button id="clearBtn" class="btn btn-warning">🗑️ Clear Data</button>
             </div>
             <div id="notification" class="notification" style="display:none;"></div>
         </div>
@@ -75,49 +75,48 @@
         <!-- Recent Records -->
         <div class="recent-section">
             <div class="section-header">
-                <h3> Recent Records</h3>
+                <h3>📋 Recent Records</h3>
                 <span class="record-count"><%= recentRecords.length %> records shown</span>
             </div>
             <div class="table-container">
-                <!-- In dashboard.ejs, update the table section --> 
-<table>
-    <thead>
-        <tr>
-            <th>#</th>
-            <th>Ws账号</th>
-            <th>平台账号</th>
-            <th>推接待</th>
-            <th>今日首存</th>
-            <th>本月首存</th>
-            <th>进粉日期</th>
-            <th>Action</th>
-        </tr>
-    </thead>
-    <tbody>
-        <% if (recentRecords.length > 0) { %>
-            <% recentRecords.forEach((record, index) => { %>
-            <tr>
-                <td><%= index + 1 %></td>
-                <td><strong><%= record.wsAccount || '-' %></strong></td>
-                <td><%= record.platformAccount %></td>
-                <td><%= record.receptionist || '-' %></td>
-                <td class="deposit-today">$<%= record.todayDeposit %></td>
-                <td class="deposit-month">$<%= record.monthDeposit %></td>
-                <td><%= record.joinDate || '-' %></td>
-                <td>
-                    <button class="btn-delete" data-id="<%= record._id %>">DELETE</button>
-                </td>
-            </tr>
-            <% }); %>
-        <% } else { %>
-            <tr>
-                <td colspan="8" style="text-align:center; padding: 40px; color: #999;">
-                    No records found. Start collecting data!
-                </td>
-            </tr>
-        <% } %>
-    </tbody>
-</table>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Ws账号</th>
+                            <th>平台账号</th>
+                            <th>推接待</th>
+                            <th>今日首存</th>
+                            <th>本月首存</th>
+                            <th>进粉日期</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (recentRecords.length > 0) { %>
+                            <% recentRecords.forEach((record, index) => { %>
+                            <tr>
+                                <td><%= index + 1 %></td>
+                                <td><strong><%= record.wsAccount || '-' %></strong></td>
+                                <td><%= record.platformAccount %></td>
+                                <td><%= record.receptionist || '-' %></td>
+                                <td class="deposit-today">$<%= record.todayDeposit %></td>
+                                <td class="deposit-month">$<%= record.monthDeposit %></td>
+                                <td><%= record.joinDate || '-' %></td>
+                                <td>
+                                    <button class="btn-delete" data-id="<%= record._id %>">🗑️</button>
+                                </td>
+                            </tr>
+                            <% }); %>
+                        <% } else { %>
+                            <tr>
+                                <td colspan="8" style="text-align:center; padding: 40px; color: #999;">
+                                    No records found. Start collecting data!
+                                </td>
+                            </tr>
+                        <% } %>
+                    </tbody>
+                </table>
             </div>
         </div>
 
