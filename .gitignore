@@ -1,0 +1,8 @@
+node_modules/
+.env
+*.log
+.DS_Store
+*.txt
+*.csv
+report_*.txt
+export_*.csv
