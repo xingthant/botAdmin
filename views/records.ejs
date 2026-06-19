@@ -88,6 +88,21 @@
             background: #fee;
             transform: scale(1.1);
         }
+        .btn-edit {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: all 0.3s;
+            padding: 5px 8px;
+            border-radius: 4px;
+        }
+        .btn-edit:hover {
+            opacity: 1;
+            background: #e7f3ff;
+            transform: scale(1.1);
+        }
         .search-section {
             display: flex;
             gap: 12px;
@@ -127,6 +142,20 @@
         }
         .btn-primary:hover {
             background: #0056b3;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #218838;
+        }
+        .btn-warning {
+            background: #ffc107;
+            color: #333;
+        }
+        .btn-warning:hover {
+            background: #e0a800;
         }
         .pagination {
             display: flex;
@@ -235,6 +264,124 @@
             white-space: nowrap;
             display: inline-block;
         }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            animation: fadeIn 0.3s;
+        }
+        .modal.active {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .modal-header h2 {
+            margin: 0;
+            font-size: 22px;
+            color: #333;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #999;
+            transition: all 0.3s;
+            padding: 0 10px;
+        }
+        .modal-close:hover {
+            color: #333;
+            transform: rotate(90deg);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+        }
+        .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #f0f0f0;
+        }
+        .form-actions .btn {
+            flex: 1;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
         @media (max-width: 768px) {
             .navbar {
                 flex-direction: column;
@@ -260,6 +407,13 @@
                 width: 100%;
                 text-align: center;
             }
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            .modal-content {
+                padding: 20px;
+                width: 95%;
+            }
         }
     </style>
 </head>
@@ -273,6 +427,7 @@
                 <span class="record-count" id="recordCount">Loading...</span>
             </div>
             <div class="nav-right">
+                <button class="btn btn-success" onclick="openAddModal()">➕ Add New</button>
                 <a href="/logout" class="logout-btn">🚪 Logout</a>
             </div>
         </nav>
@@ -300,7 +455,7 @@
                         <th>本月首存</th>
                         <th>开发</th>
                         <th>Sender</th>
-                        <th>Action</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="recordsBody">
@@ -320,11 +475,87 @@
         <div class="pagination" id="pagination"></div>
     </div>
 
+    <!-- Add/Edit Modal -->
+    <div id="recordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add New Record</h2>
+                <button class="modal-close" onclick="closeModal()">✕</button>
+            </div>
+            <form id="recordForm" onsubmit="saveRecord(event)">
+                <input type="hidden" id="editId" value="">
+                
+                <div class="form-group">
+                    <label>Ws账号</label>
+                    <input type="text" id="formWsAccount" placeholder="Enter Ws账号">
+                </div>
+                
+                <div class="form-group">
+                    <label>平台账号 *</label>
+                    <input type="text" id="formPlatformAccount" placeholder="Enter platform account" required>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>今日首存</label>
+                        <input type="number" id="formTodayDeposit" placeholder="0" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>本月首存</label>
+                        <input type="number" id="formMonthDeposit" placeholder="0" value="0">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>进粉日期</label>
+                        <input type="text" id="formJoinDate" placeholder="e.g., 18/6">
+                    </div>
+                    <div class="form-group">
+                        <label>IP状态</label>
+                        <select id="formIpStatus">
+                            <option value="正常">正常</option>
+                            <option value="异常">异常</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>开发</label>
+                    <input type="text" id="formDeveloper" placeholder="Enter developer name">
+                </div>
+                
+                <div class="form-group">
+                    <label>推接待</label>
+                    <input type="text" id="formReceptionist" placeholder="Enter receptionist name">
+                </div>
+                
+                <div class="form-group">
+                    <label>Sender Name</label>
+                    <input type="text" id="formSenderName" placeholder="Enter sender name">
+                </div>
+                
+                <div class="form-group">
+                    <label>Raw Message</label>
+                    <textarea id="formRawMessage" placeholder="Enter the full message"></textarea>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="saveBtn">💾 Save Record</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         let currentPage = 1;
         let currentQuery = '';
         const limit = 30;
 
+        // =========================
+        // SEARCH FUNCTIONS
+        // =========================
         function searchRecords() {
             const query = document.getElementById('searchInput').value.trim();
             currentQuery = query;
@@ -352,6 +583,9 @@
             loadRecords(1);
         }
 
+        // =========================
+        // LOAD RECORDS
+        // =========================
         function loadRecords(page = 1) {
             currentPage = page;
             const url = `/api/records?page=${page}&limit=${limit}`;
@@ -369,6 +603,9 @@
                 });
         }
 
+        // =========================
+        // RENDER RECORDS
+        // =========================
         function renderRecords(records) {
             const tbody = document.getElementById('recordsBody');
             
@@ -379,7 +616,7 @@
                             <div class="empty-state">
                                 <div class="icon">📭</div>
                                 <p>No records found</p>
-                                <p style="font-size:12px; color:#bbb;">Start collecting data to see records here</p>
+                                <p style="font-size:12px; color:#bbb;">Start collecting data or add a new record</p>
                             </div>
                         </td>
                     </tr>
@@ -408,6 +645,7 @@
                         <td><span class="truncate" title="${r.developer || ''}">${r.developer || '-'}</span></td>
                         <td><span class="truncate" title="${r.senderName || ''}">${r.senderName || '-'}</span></td>
                         <td>
+                            <button class="btn-edit" data-id="${r._id}" title="Edit record">✏️</button>
                             <button class="btn-delete" data-id="${r._id}" title="Delete record">🗑️</button>
                         </td>
                     </tr>
@@ -415,6 +653,9 @@
             }).join('');
         }
 
+        // =========================
+        // PAGINATION
+        // =========================
         function renderPagination(total, currentPage, totalPages) {
             const pagination = document.getElementById('pagination');
             
@@ -464,21 +705,113 @@
             `;
         }
 
-        // Delete record
+        // =========================
+        // MODAL FUNCTIONS
+        // =========================
+        function openAddModal() {
+            document.getElementById('modalTitle').textContent = '➕ Add New Record';
+            document.getElementById('editId').value = '';
+            document.getElementById('recordForm').reset();
+            document.getElementById('formTodayDeposit').value = '0';
+            document.getElementById('formMonthDeposit').value = '0';
+            document.getElementById('formIpStatus').value = '正常';
+            document.getElementById('saveBtn').textContent = '💾 Save Record';
+            document.getElementById('recordModal').classList.add('active');
+        }
+
+        function openEditModal(record) {
+            document.getElementById('modalTitle').textContent = '✏️ Edit Record';
+            document.getElementById('editId').value = record._id;
+            document.getElementById('formWsAccount').value = record.wsAccount || '';
+            document.getElementById('formPlatformAccount').value = record.platformAccount || '';
+            document.getElementById('formTodayDeposit').value = record.todayDeposit || 0;
+            document.getElementById('formMonthDeposit').value = record.monthDeposit || 0;
+            document.getElementById('formJoinDate').value = record.joinDate || '';
+            document.getElementById('formIpStatus').value = record.ipStatus || '正常';
+            document.getElementById('formDeveloper').value = record.developer || '';
+            document.getElementById('formReceptionist').value = record.receptionist || '';
+            document.getElementById('formSenderName').value = record.senderName || '';
+            document.getElementById('formRawMessage').value = record.rawMessage || '';
+            document.getElementById('saveBtn').textContent = '✏️ Update Record';
+            document.getElementById('recordModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('recordModal').classList.remove('active');
+        }
+
+        // =========================
+        // SAVE RECORD (Add/Edit)
+        // =========================
+        function saveRecord(event) {
+            event.preventDefault();
+            
+            const editId = document.getElementById('editId').value;
+            const data = {
+                wsAccount: document.getElementById('formWsAccount').value.trim(),
+                platformAccount: document.getElementById('formPlatformAccount').value.trim(),
+                todayDeposit: parseInt(document.getElementById('formTodayDeposit').value) || 0,
+                monthDeposit: parseInt(document.getElementById('formMonthDeposit').value) || 0,
+                joinDate: document.getElementById('formJoinDate').value.trim(),
+                ipStatus: document.getElementById('formIpStatus').value,
+                developer: document.getElementById('formDeveloper').value.trim(),
+                receptionist: document.getElementById('formReceptionist').value.trim(),
+                senderName: document.getElementById('formSenderName').value.trim() || 'Admin',
+                rawMessage: document.getElementById('formRawMessage').value.trim()
+            };
+
+            if (!data.platformAccount) {
+                alert('⚠️ Platform Account is required!');
+                return;
+            }
+
+            const url = editId ? `/api/record/${editId}` : '/api/record';
+            const method = editId ? 'PUT' : 'POST';
+
+            fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(result => {
+                if (result.success) {
+                    alert(result.message || 'Record saved successfully!');
+                    closeModal();
+                    if (currentQuery) {
+                        searchRecords();
+                    } else {
+                        loadRecords(currentPage);
+                    }
+                } else {
+                    alert('Error: ' + (result.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('Error saving record:', err);
+                alert('Error saving record: ' + err.message);
+            });
+        }
+
+        // =========================
+        // DELETE RECORD
+        // =========================
         document.addEventListener('click', function(e) {
             if (e.target.classList.contains('btn-delete')) {
                 const id = e.target.dataset.id;
                 if (confirm('⚠️ Are you sure you want to delete this record?')) {
                     fetch(`/api/record/${id}`, { method: 'DELETE' })
-                        .then(res => {
-                            if (res.ok) {
+                        .then(res => res.json())
+                        .then(result => {
+                            if (result.success) {
+                                alert('✅ Record deleted successfully!');
                                 if (currentQuery) {
                                     searchRecords();
                                 } else {
                                     loadRecords(currentPage);
                                 }
                             } else {
-                                alert('Error deleting record');
+                                alert('Error: ' + (result.error || 'Unknown error'));
                             }
                         })
                         .catch(err => {
@@ -489,7 +822,31 @@
             }
         });
 
-        // Pagination click
+        // =========================
+        // EDIT RECORD (Open Modal)
+        // =========================
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('btn-edit')) {
+                const id = e.target.dataset.id;
+                fetch(`/api/record/${id}`)
+                    .then(res => res.json())
+                    .then(record => {
+                        if (record) {
+                            openEditModal(record);
+                        } else {
+                            alert('Error: Record not found');
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error fetching record:', err);
+                        alert('Error fetching record: ' + err.message);
+                    });
+            }
+        });
+
+        // =========================
+        // PAGINATION CLICK
+        // =========================
         document.addEventListener('click', function(e) {
             if (e.target.classList.contains('page-btn')) {
                 const page = parseInt(e.target.dataset.page);
@@ -503,7 +860,31 @@
             }
         });
 
-        // Load initial records
+        // =========================
+        // CLOSE MODAL ON OVERLAY CLICK
+        // =========================
+        document.getElementById('recordModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        // =========================
+        // KEYBOARD SHORTCUTS
+        // =========================
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+            if (e.ctrlKey && e.key === 'n') {
+                e.preventDefault();
+                openAddModal();
+            }
+        });
+
+        // =========================
+        // LOAD INITIAL RECORDS
+        // =========================
         loadRecords(1);
     </script>
 </body>
