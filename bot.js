@@ -902,7 +902,17 @@ bot.on("message", async (msg) => {
 // ERROR HANDLING
 // =========================
 bot.on("polling_error", (err) => {
-    console.log("❌ Polling error:", err.code || err.message);
+    console.error("========== POLLING ERROR ==========");
+    console.error(err);
+    console.error("Code:", err.code);
+    console.error("Message:", err.message);
+
+    if (err.response) {
+        console.error("Status:", err.response.statusCode);
+        console.error("Body:", err.response.body);
+    }
+
+    console.error("==================================");
 });
 
 bot.on("error", (err) => {
