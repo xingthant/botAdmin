@@ -29,7 +29,20 @@ if (!ADMIN_PASSWORD) {
 }
 
 console.log("✅ Environment variables loaded successfully");
-console.log(`🔑 Admin password set: ${ADMIN_PASSWORD ? 'Yes' : 'No'}`);
+
+// =========================
+// STATE
+// =========================
+let collecting = false;
+let records = [];
+let accountSet = new Set();
+let totalRecords = 0;
+let totalTodayDeposit = 0;
+let totalMonthDeposit = 0;
+let collectionStartTime = null;
+let isMongoConnected = false;
+let messageQueue = [];
+let isProcessingQueue = false;
 
 // =========================
 // INIT BOT
@@ -44,28 +57,14 @@ const bot = new TelegramBot(TOKEN, {
 });
 
 // =========================
-// STATE
-// =========================
-let collecting = false;
-let records = [];
-let accountSet = new Set();
-let totalRecords = 0;
-let totalTodayDeposit = 0;
-let totalMonthDeposit = 0;
-let collectionStartTime = null;
-let isMongoConnected = false;
-
-// =========================
 // EXTRACT DATA FUNCTION
 // =========================
 function extractData(text) {
-    console.log('🔍 Processing text:', text.substring(0, 100) + '...');
+    console.log('🔍 Processing text...');
     
-    // Extract Ws账号
     const wsMatch = text.match(/(?:Ws账号|WS账号|ws账号)[\s\u3000]*[：:；;][\s\u3000]*(\d+)/i);
     const wsAccount = wsMatch ? wsMatch[1].trim() : null;
     
-    // Extract 平台账号 or 会员账户
     const accountMatch = text.match(/(?:平台账号|会员账户|会员账号)[\s\u3000]*[：:；;][\s\u3000]*(\d+)/i);
     let platformAccount = accountMatch ? accountMatch[1].trim() : null;
     
@@ -84,15 +83,12 @@ function extractData(text) {
         }
     }
     
-    // Extract 进粉日期
     const dateMatch = text.match(/(?:进粉日期|日期|进粉)[\s\u3000]*[：:；;][\s\u3000]*([^\s\n]+)/);
     const joinDate = dateMatch ? dateMatch[1].trim() : '';
     
-    // Extract IP状态
     const ipMatch = text.match(/(?:IP状态|IP)[\s\u3000]*[：:；;][\s\u3000]*([^\s\n]+)/);
     const ipStatus = ipMatch ? ipMatch[1].trim() : '正常';
     
-    // Extract 开发
     const devMatch = text.match(/(?:开发|开发者)[\s\u3000]*[：:；;][\s\u3000]*([^\n]+)/);
     let developer = devMatch ? devMatch[1].trim() : '';
     if (developer) {
@@ -102,7 +98,6 @@ function extractData(text) {
         developer = developer.trim();
     }
     
-    // Extract 推接待
     const recMatch = text.match(/(?:推接待|接待)[\s\u3000]*[：:；;][\s\u3000]*([^\n]+)/);
     let receptionist = recMatch ? recMatch[1].trim() : '';
     if (receptionist) {
@@ -112,7 +107,6 @@ function extractData(text) {
         receptionist = receptionist.trim();
     }
 
-    // Extract deposits
     let todayDeposit = 0;
     let monthDeposit = 0;
     
@@ -139,18 +133,168 @@ function extractData(text) {
 }
 
 // =========================
+// SAVE RECORD WITH RETRY
+// =========================
+async function saveRecordWithRetry(recordData, maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            // Check if MongoDB is connected
+            if (mongoose.connection.readyState !== 1) {
+                console.log(`⚠️ MongoDB not ready, attempt ${attempt}/${maxRetries}`);
+                await new Promise(resolve => setTimeout(resolve, 3000 * attempt));
+                continue;
+            }
+
+            const record = new Record(recordData);
+            await record.save();
+            console.log(`✅ Saved successfully on attempt ${attempt}`);
+            return true;
+        } catch (err) {
+            console.log(`❌ Save attempt ${attempt} failed:`, err.message);
+            
+            // If duplicate error, it's already saved
+            if (err.code === 11000) {
+                console.log(`⚠️ Record already exists in DB`);
+                return true;
+            }
+            
+            if (attempt === maxRetries) {
+                console.error('❌ All save attempts failed, backing up locally');
+                saveToLocalBackup(recordData);
+                return false;
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+        }
+    }
+    return false;
+}
+
+// =========================
+// LOCAL BACKUP
+// =========================
+function saveToLocalBackup(data) {
+    try {
+        const backupFile = path.join(__dirname, 'backup.json');
+        let backups = [];
+        if (fs.existsSync(backupFile)) {
+            backups = JSON.parse(fs.readFileSync(backupFile, 'utf-8'));
+        }
+        backups.push({
+            timestamp: new Date().toISOString(),
+            data: data
+        });
+        // Keep only last 1000 backups
+        if (backups.length > 1000) {
+            backups = backups.slice(-1000);
+        }
+        fs.writeFileSync(backupFile, JSON.stringify(backups, null, 2));
+        console.log(`💾 Saved to local backup (${backups.length} total backups)`);
+    } catch (err) {
+        console.error('❌ Failed to save local backup:', err);
+    }
+}
+
+// =========================
+// PROCESS MESSAGE
+// =========================
+async function processMessage(msg) {
+    if (!collecting) return;
+    if (!msg.text) return;
+    if (msg.text.startsWith("/")) return;
+    
+    // Check MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+        console.log("📥 Queuing message (MongoDB not ready)");
+        messageQueue.push(msg);
+        return;
+    }
+
+    const text = msg.text.trim();
+    const data = extractData(text);
+
+    if (!data.platformAccount) {
+        console.log(`⚠️ No account found`);
+        return;
+    }
+
+    if (accountSet.has(data.platformAccount)) {
+        console.log(`⏭️ Duplicate: ${data.platformAccount}`);
+        return;
+    }
+
+    accountSet.add(data.platformAccount);
+    totalRecords++;
+    totalTodayDeposit += data.todayDeposit;
+    totalMonthDeposit += data.monthDeposit;
+
+    const senderName = msg.from.username ? `@${msg.from.username}` : `${msg.from.first_name || 'User'}`;
+
+    try {
+        const now = new Date();
+        const collectionDate = now.toISOString().split('T')[0];
+        const collectionMonth = collectionDate.substring(0, 7);
+        
+        const recordData = {
+            wsAccount: data.wsAccount,
+            platformAccount: data.platformAccount,
+            todayDeposit: data.todayDeposit,
+            monthDeposit: data.monthDeposit,
+            joinDate: data.joinDate,
+            ipStatus: data.ipStatus,
+            developer: data.developer,
+            receptionist: data.receptionist,
+            senderName: senderName,
+            senderId: msg.from.id,
+            rawMessage: text,
+            collectionDate: collectionDate,
+            collectionMonth: collectionMonth
+        };
+
+        const saved = await saveRecordWithRetry(recordData);
+        if (saved) {
+            console.log(`✅ Saved: ${data.platformAccount}`);
+        } else {
+            console.log(`⚠️ Failed to save: ${data.platformAccount} (backed up locally)`);
+        }
+    } catch (err) {
+        console.error('❌ Error processing message:', err);
+    }
+}
+
+// =========================
+// PROCESS QUEUE
+// =========================
+async function processQueue() {
+    if (isProcessingQueue || messageQueue.length === 0) return;
+    
+    isProcessingQueue = true;
+    console.log(`📤 Processing ${messageQueue.length} queued messages`);
+    
+    while (messageQueue.length > 0) {
+        const msg = messageQueue.shift();
+        await processMessage(msg);
+        // Small delay between processing queued messages
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    isProcessingQueue = false;
+    console.log('✅ Queue processing complete');
+}
+
+// =========================
 // LOAD EXISTING ACCOUNTS
 // =========================
 async function loadExistingAccounts() {
     try {
-        if (!isMongoConnected) return;
+        if (mongoose.connection.readyState !== 1) return;
         const accounts = await Record.find({}, 'platformAccount');
+        accountSet.clear();
         accounts.forEach(record => {
             if (record.platformAccount) {
                 accountSet.add(record.platformAccount);
             }
         });
-        console.log(`✅ Loaded ${accountSet.size} existing accounts from database`);
+        console.log(`✅ Loaded ${accountSet.size} existing accounts`);
     } catch (err) {
         console.error('Error loading existing accounts:', err);
     }
@@ -164,10 +308,13 @@ async function connectMongoDB() {
         await mongoose.connect(MONGODB_URI, {
             serverSelectionTimeoutMS: 10000,
             socketTimeoutMS: 45000,
+            heartbeatFrequencyMS: 30000,
         });
         isMongoConnected = true;
         console.log("✅ Connected to MongoDB");
         await loadExistingAccounts();
+        // Process any queued messages
+        await processQueue();
         return true;
     } catch (err) {
         console.error("❌ MongoDB Connection Error:", err.message);
@@ -177,47 +324,46 @@ async function connectMongoDB() {
 }
 
 // =========================
-// START BOT
+// MONGODB EVENT HANDLERS
 // =========================
-async function startBot() {
-    try {
-        // Connect to MongoDB first
-        await connectMongoDB();
-        
-        // Start bot polling
-        bot.startPolling();
-        console.log("🤖 Bot polling started");
-        
-        // Start Express server
-        startExpressServer();
-    } catch (err) {
-        console.error("❌ Failed to start bot:", err);
-        // Try to start without MongoDB
-        bot.startPolling();
-        console.log("🤖 Bot started without MongoDB");
-        startExpressServer();
-    }
-}
+mongoose.connection.on('connected', async () => {
+    console.log('✅ MongoDB connected');
+    isMongoConnected = true;
+    await loadExistingAccounts();
+    await processQueue();
+});
+
+mongoose.connection.on('disconnected', () => {
+    console.log('❌ MongoDB disconnected');
+    isMongoConnected = false;
+});
+
+mongoose.connection.on('error', (err) => {
+    console.error('❌ MongoDB error:', err);
+    isMongoConnected = false;
+});
+
+mongoose.connection.on('reconnected', async () => {
+    console.log('✅ MongoDB reconnected');
+    isMongoConnected = true;
+    await loadExistingAccounts();
+    await processQueue();
+});
 
 // =========================
-// EXPRESS SERVER
+// EXPRESS APP
 // =========================
 const app = express();
 
-// View engine setup
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Middleware
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// =========================
-// SESSION CONFIGURATION - FIXED
-// =========================
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key-change-this-to-something-random',
+    secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
     resave: false,
     saveUninitialized: false,
     cookie: { 
@@ -230,40 +376,35 @@ app.use(session({
 }));
 
 // =========================
-// AUTHENTICATION WITH LOGGING
+// AUTHENTICATION
 // =========================
 function isAuthenticated(req, res, next) {
-    console.log('🔍 Auth check - Session:', req.session);
-    console.log('🔍 Auth check - isAdmin:', req.session?.isAdmin);
-    
     if (req.session && req.session.isAdmin) {
-        console.log('✅ Authenticated, proceeding');
         next();
     } else {
-        console.log('❌ Not authenticated, redirecting to login');
         res.redirect('/login');
     }
 }
 
 // =========================
-// HEALTH CHECK (for Render)
+// HEALTH CHECK
 // =========================
 app.get('/health', (req, res) => {
     res.status(200).json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        mongo: isMongoConnected ? 'connected' : 'disconnected',
-        bot: 'running',
+        mongo: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+        mongoState: mongoose.connection.readyState,
         collecting: collecting,
-        records: accountSet.size
+        records: accountSet.size,
+        queued: messageQueue.length
     });
 });
 
 // =========================
-// LOGIN ROUTES - FIXED
+// LOGIN ROUTES
 // =========================
 app.get('/login', (req, res) => {
-    // Clear any existing session first
     if (req.session) {
         req.session.isAdmin = false;
     }
@@ -272,61 +413,33 @@ app.get('/login', (req, res) => {
 
 app.post('/login', (req, res) => {
     const { password } = req.body;
-    console.log(`🔐 Login attempt with password: ${password}`);
-    console.log(`🔐 Expected password: ${ADMIN_PASSWORD}`);
-    
-    // Trim both to avoid whitespace issues
     const trimmedPassword = password ? password.trim() : '';
     const trimmedAdminPassword = ADMIN_PASSWORD ? ADMIN_PASSWORD.trim() : '';
     
     if (trimmedPassword === trimmedAdminPassword) {
         req.session.isAdmin = true;
-        console.log('✅ Login successful! Session created.');
-        console.log('Session ID:', req.sessionID);
-        console.log('Session data:', req.session);
-        
-        // Force save session before redirect
         req.session.save((err) => {
             if (err) {
                 console.error('Session save error:', err);
                 return res.render('login', { error: 'Session error, please try again' });
             }
-            console.log('✅ Session saved successfully');
             res.redirect('/dashboard');
         });
     } else {
-        console.log('❌ Login failed - password mismatch');
         res.render('login', { error: 'Invalid password' });
     }
 });
 
 app.get('/logout', (req, res) => {
     req.session.destroy((err) => {
-        if (err) {
-            console.error('Logout error:', err);
-        }
         res.redirect('/login');
     });
 });
 
 // =========================
-// DEBUG ROUTE
-// =========================
-app.get('/debug-session', (req, res) => {
-    res.json({
-        sessionID: req.sessionID,
-        session: req.session,
-        isAdmin: req.session?.isAdmin || false,
-        headers: req.headers,
-        cookies: req.headers.cookie || 'No cookies'
-    });
-});
-
-// =========================
-// DASHBOARD ROUTE
+// DASHBOARD
 // =========================
 app.get('/dashboard', isAuthenticated, async (req, res) => {
-    console.log('📊 Dashboard accessed, session:', req.session.isAdmin);
     try {
         const today = new Date().toISOString().split('T')[0];
         const currentMonth = today.substring(0, 7);
@@ -334,21 +447,23 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
         let total = 0, unique = 0, todayCount = 0, monthCount = 0, todaySum = 0, monthSum = 0;
         let recentRecords = [];
 
-        if (isMongoConnected) {
-            [total, unique, todayCount, monthCount, todaySum, monthSum] = await Promise.all([
-                Record.countDocuments(),
-                Record.distinct('platformAccount').then(arr => arr.length),
-                Record.countDocuments({ collectionDate: today }),
-                Record.countDocuments({ collectionMonth: currentMonth }),
-                Record.aggregate([
-                    { $match: { collectionDate: today } },
-                    { $group: { _id: null, total: { $sum: "$todayDeposit" } } }
-                ]).then(result => result[0]?.total || 0),
-                Record.aggregate([
-                    { $match: { collectionMonth: currentMonth } },
-                    { $group: { _id: null, total: { $sum: "$monthDeposit" } } }
-                ]).then(result => result[0]?.total || 0)
+        if (mongoose.connection.readyState === 1) {
+            total = await Record.countDocuments();
+            unique = await Record.distinct('platformAccount').then(arr => arr.length);
+            todayCount = await Record.countDocuments({ collectionDate: today });
+            monthCount = await Record.countDocuments({ collectionMonth: currentMonth });
+            
+            const todayResult = await Record.aggregate([
+                { $match: { collectionDate: today } },
+                { $group: { _id: null, total: { $sum: "$todayDeposit" } } }
             ]);
+            todaySum = todayResult[0]?.total || 0;
+            
+            const monthResult = await Record.aggregate([
+                { $match: { collectionMonth: currentMonth } },
+                { $group: { _id: null, total: { $sum: "$monthDeposit" } } }
+            ]);
+            monthSum = monthResult[0]?.total || 0;
 
             recentRecords = await Record.find()
                 .sort({ collectedAt: -1 })
@@ -364,7 +479,9 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
             monthRecords: monthCount,
             monthDeposit: monthSum,
             recentRecords: recentRecords,
-            collectionStartTime: collectionStartTime
+            collectionStartTime: collectionStartTime,
+            mongoConnected: mongoose.connection.readyState === 1,
+            queuedMessages: messageQueue.length
         });
     } catch (err) {
         console.error('Dashboard error:', err);
@@ -385,10 +502,10 @@ app.get('/', (req, res) => {
 // =========================
 app.get('/api/stats', isAuthenticated, async (req, res) => {
     try {
-        const total = isMongoConnected ? await Record.countDocuments() : 0;
-        const unique = isMongoConnected ? await Record.distinct('platformAccount').then(arr => arr.length) : 0;
+        const total = mongoose.connection.readyState === 1 ? await Record.countDocuments() : 0;
+        const unique = mongoose.connection.readyState === 1 ? await Record.distinct('platformAccount').then(arr => arr.length) : 0;
         const today = new Date().toISOString().split('T')[0];
-        const todayCount = isMongoConnected ? await Record.countDocuments({ collectionDate: today }) : 0;
+        const todayCount = mongoose.connection.readyState === 1 ? await Record.countDocuments({ collectionDate: today }) : 0;
         
         res.json({
             totalRecords: total,
@@ -396,7 +513,8 @@ app.get('/api/stats', isAuthenticated, async (req, res) => {
             todayRecords: todayCount,
             collecting: collecting,
             status: collecting ? 'active' : 'stopped',
-            mongoConnected: isMongoConnected
+            mongoConnected: mongoose.connection.readyState === 1,
+            queuedMessages: messageQueue.length
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -429,7 +547,7 @@ app.get('/api/records', isAuthenticated, async (req, res) => {
         const limit = parseInt(req.query.limit) || 50;
         const skip = (page - 1) * limit;
 
-        if (!isMongoConnected) {
+        if (mongoose.connection.readyState !== 1) {
             return res.json({ records: [], total: 0, page: 1, totalPages: 0 });
         }
 
@@ -454,7 +572,7 @@ app.get('/api/records', isAuthenticated, async (req, res) => {
 app.get('/api/search', isAuthenticated, async (req, res) => {
     try {
         const query = req.query.q;
-        if (!query || !isMongoConnected) {
+        if (!query || mongoose.connection.readyState !== 1) {
             return res.json({ records: [] });
         }
 
@@ -477,7 +595,7 @@ app.get('/api/search', isAuthenticated, async (req, res) => {
 
 app.delete('/api/record/:id', isAuthenticated, async (req, res) => {
     try {
-        if (!isMongoConnected) {
+        if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ error: 'MongoDB not connected' });
         }
         
@@ -498,7 +616,7 @@ app.delete('/api/record/:id', isAuthenticated, async (req, res) => {
 
 app.get('/api/export', isAuthenticated, async (req, res) => {
     try {
-        if (!isMongoConnected) {
+        if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ error: 'MongoDB not connected' });
         }
         
@@ -520,7 +638,7 @@ app.get('/api/export', isAuthenticated, async (req, res) => {
 
 app.post('/api/clear', isAuthenticated, async (req, res) => {
     try {
-        if (!isMongoConnected) {
+        if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ error: 'MongoDB not connected' });
         }
         
@@ -541,7 +659,7 @@ app.post('/api/clear', isAuthenticated, async (req, res) => {
 // =========================
 app.post('/api/record', isAuthenticated, async (req, res) => {
     try {
-        if (!isMongoConnected) {
+        if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ error: 'MongoDB not connected' });
         }
 
@@ -558,12 +676,10 @@ app.post('/api/record', isAuthenticated, async (req, res) => {
             rawMessage
         } = req.body;
 
-        // Validate required fields
         if (!platformAccount) {
             return res.status(400).json({ error: 'Platform account is required' });
         }
 
-        // Check for duplicate
         const existing = await Record.findOne({ platformAccount });
         if (existing) {
             return res.status(400).json({ error: 'Platform account already exists' });
@@ -604,7 +720,7 @@ app.post('/api/record', isAuthenticated, async (req, res) => {
 // =========================
 app.get('/api/record/:id', isAuthenticated, async (req, res) => {
     try {
-        if (!isMongoConnected) {
+        if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ error: 'MongoDB not connected' });
         }
 
@@ -624,7 +740,7 @@ app.get('/api/record/:id', isAuthenticated, async (req, res) => {
 // =========================
 app.put('/api/record/:id', isAuthenticated, async (req, res) => {
     try {
-        if (!isMongoConnected) {
+        if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ error: 'MongoDB not connected' });
         }
 
@@ -650,13 +766,11 @@ app.put('/api/record/:id', isAuthenticated, async (req, res) => {
             return res.status(404).json({ error: 'Record not found' });
         }
 
-        // If platform account is changing, update the set
         if (record.platformAccount !== platformAccount) {
             accountSet.delete(record.platformAccount);
             accountSet.add(platformAccount);
         }
 
-        // Update fields
         record.wsAccount = wsAccount || '';
         record.platformAccount = platformAccount;
         record.todayDeposit = parseInt(todayDeposit) || 0;
@@ -685,8 +799,27 @@ function startExpressServer() {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`🌐 Admin panel running on port ${PORT}`);
         console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-        console.log(`🔗 Debug session: http://localhost:${PORT}/debug-session`);
     });
+}
+
+// =========================
+// START BOT
+// =========================
+async function startBot() {
+    try {
+        await connectMongoDB();
+        bot.startPolling();
+        console.log("🤖 Bot polling started");
+        startExpressServer();
+        
+        // Start queue processor (runs every 10 seconds)
+        setInterval(processQueue, 10000);
+    } catch (err) {
+        console.error("❌ Failed to start bot:", err);
+        bot.startPolling();
+        console.log("🤖 Bot started without MongoDB");
+        startExpressServer();
+    }
 }
 
 // =========================
@@ -694,60 +827,29 @@ function startExpressServer() {
 // =========================
 bot.onText(/\/startcollect/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
-
     collecting = true;
     records = [];
     totalRecords = 0;
     totalTodayDeposit = 0;
     totalMonthDeposit = 0;
     collectionStartTime = new Date();
-
-    bot.sendMessage(msg.chat.id, "🚀 Collection Started! Data will be saved to MongoDB");
+    bot.sendMessage(msg.chat.id, "🚀 Collection Started!");
 });
 
 bot.onText(/\/summary/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
-
     try {
-        if (!isMongoConnected) {
+        if (mongoose.connection.readyState !== 1) {
             return bot.sendMessage(msg.chat.id, "❌ MongoDB is not connected");
         }
-
         const today = new Date().toISOString().split('T')[0];
         const currentMonth = today.substring(0, 7);
-
-        const [todayCount, monthCount, totalCount] = await Promise.all([
-            Record.countDocuments({ collectionDate: today }),
-            Record.countDocuments({ collectionMonth: currentMonth }),
-            Record.countDocuments()
-        ]);
-
-        const [todaySum, monthSum, totalSum] = await Promise.all([
-            Record.aggregate([
-                { $match: { collectionDate: today } },
-                { $group: { _id: null, total: { $sum: "$todayDeposit" } } }
-            ]),
-            Record.aggregate([
-                { $match: { collectionMonth: currentMonth } },
-                { $group: { _id: null, total: { $sum: "$monthDeposit" } } }
-            ]),
-            Record.aggregate([
-                { $group: { _id: null, total: { $sum: "$todayDeposit" } } }
-            ])
-        ]);
-
+        const todayCount = await Record.countDocuments({ collectionDate: today });
+        const monthCount = await Record.countDocuments({ collectionMonth: currentMonth });
+        const totalCount = await Record.countDocuments();
         const status = collecting ? "🟢 Active" : "🔴 Stopped";
-        bot.sendMessage(
-            msg.chat.id,
-            `📊 Summary\n\n` +
-            `Status: ${status}\n` +
-            `MongoDB: ${isMongoConnected ? '✅ Connected' : '❌ Disconnected'}\n` +
-            `Today Records: ${todayCount}\n` +
-            `Today Deposit: ${todaySum[0]?.total || 0}\n\n` +
-            `Month Records: ${monthCount}\n` +
-            `Month Deposit: ${monthSum[0]?.total || 0}\n\n` +
-            `Total Records: ${totalCount}\n` +
-            `Total Deposit: ${totalSum[0]?.total || 0}`
+        bot.sendMessage(msg.chat.id, 
+            `📊 Summary\n\nStatus: ${status}\nToday Records: ${todayCount}\nMonth Records: ${monthCount}\nTotal Records: ${totalCount}\nQueued: ${messageQueue.length}`
         );
     } catch (err) {
         console.error('Error getting summary:', err);
@@ -757,115 +859,30 @@ bot.onText(/\/summary/, async (msg) => {
 
 bot.onText(/\/stopcollect/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
-
     collecting = false;
     collectionStartTime = null;
-
-    try {
-        if (!isMongoConnected) {
-            return bot.sendMessage(msg.chat.id, "❌ MongoDB is not connected");
-        }
-
-        const allRecords = await Record.find()
-            .sort({ collectedAt: -1 })
-            .limit(1000);
-
-        let report = `
-===== REPORT =====
-
-Total Records: ${await Record.countDocuments()}
-Total Unique Accounts: ${await Record.distinct('platformAccount').then(arr => arr.length)}
-
-========================
-
-${allRecords.map(r => 
-    `[Sender: ${r.senderName}]\n${r.rawMessage}\n` +
-    `Platform: ${r.platformAccount} | Today: ${r.todayDeposit} | Month: ${r.monthDeposit}`
-).join('\n\n----------------------\n\n')}
-`;
-
-        const fileName = `report_${Date.now()}.txt`;
-        fs.writeFileSync(fileName, report);
-
-        await bot.sendDocument(msg.chat.id, fileName);
-        
-        const stats = await Record.aggregate([
-            { $group: {
-                _id: null,
-                totalRecords: { $sum: 1 },
-                totalToday: { $sum: "$todayDeposit" },
-                totalMonth: { $sum: "$monthDeposit" }
-            }}
-        ]);
-
-        bot.sendMessage(
-            msg.chat.id,
-            `✅ Collection Stopped\n\n` +
-            `Records: ${stats[0]?.totalRecords || 0}\n` +
-            `Today Total: ${stats[0]?.totalToday || 0}\n` +
-            `Month Total: ${stats[0]?.totalMonth || 0}`
-        );
-
-        if (fs.existsSync(fileName)) {
-            fs.unlinkSync(fileName);
-        }
-    } catch (err) {
-        console.error('Error generating report:', err);
-        bot.sendMessage(msg.chat.id, "❌ Error generating report");
-    }
+    bot.sendMessage(msg.chat.id, "✅ Collection Stopped");
 });
 
 bot.onText(/\/status/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
-
     const status = collecting ? "🟢 Active" : "🔴 Stopped";
-    const total = isMongoConnected ? await Record.countDocuments() : 0;
-    const unique = isMongoConnected ? await Record.distinct('platformAccount').then(arr => arr.length) : 0;
-    
-    let timeRunning = "N/A";
-    if (collectionStartTime) {
-        const diff = Math.floor((Date.now() - collectionStartTime) / 1000);
-        const hours = Math.floor(diff / 3600);
-        const minutes = Math.floor((diff % 3600) / 60);
-        timeRunning = `${hours}h ${minutes}m`;
-    }
-
-    bot.sendMessage(
-        msg.chat.id,
-        `🤖 Bot Status\n\n` +
-        `Status: ${status}\n` +
-        `Running: ${timeRunning}\n` +
-        `MongoDB: ${isMongoConnected ? '✅ Connected' : '❌ Disconnected'}\n` +
-        `Total Records: ${total}\n` +
-        `Unique Accounts: ${unique}\n` +
-        `Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`
+    const total = mongoose.connection.readyState === 1 ? await Record.countDocuments() : 0;
+    const mongoStatus = mongoose.connection.readyState === 1 ? '✅ Connected' : '❌ Disconnected';
+    bot.sendMessage(msg.chat.id, 
+        `🤖 Bot Status\n\nStatus: ${status}\nMongoDB: ${mongoStatus}\nTotal Records: ${total}\nQueued: ${messageQueue.length}`
     );
 });
 
 bot.onText(/\/test/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
-
     const testMessages = [
-        "Ws账号 :  5219241039856\n平台账号:9241039856\n进粉日期：18/6\nIP状态：正常\n今日首存 ：            5\n本月首存​​​​​​ ：20\n开发：雪瑶   //////  蕊非\n推接待_    涵月",
-        "平台账号: 9612678130\n今日首存: 3\n本月首存: 58",
-        "会员账户: 9372274807\n今日首存: 3\n本月首存: 59"
+        "Ws账号 :  5219241039856\n平台账号:9241039856\n进粉日期：18/6\nIP状态：正常\n今日首存 ：5\n本月首存 ：20\n开发：雪瑶\n推接待：涵月"
     ];
-
     for (const testMsg of testMessages) {
         const data = extractData(testMsg);
-        await bot.sendMessage(
-            msg.chat.id,
-            `📝 Test Extraction:\n\n` +
-            `Raw:\n${testMsg}\n\n` +
-            `Extracted:\n` +
-            `Ws账号: ${data.wsAccount || 'Not found'}\n` +
-            `平台账号: ${data.platformAccount || 'Not found'}\n` +
-            `进粉日期: ${data.joinDate || 'Not found'}\n` +
-            `IP状态: ${data.ipStatus || 'Not found'}\n` +
-            `今日首存: ${data.todayDeposit}\n` +
-            `本月首存: ${data.monthDeposit}\n` +
-            `开发: ${data.developer || 'Not found'}\n` +
-            `推接待: ${data.receptionist || 'Not found'}`
+        await bot.sendMessage(msg.chat.id, 
+            `📝 Test:\n平台账号: ${data.platformAccount || 'Not found'}\n今日首存: ${data.todayDeposit}\n本月首存: ${data.monthDeposit}`
         );
     }
 });
@@ -877,64 +894,8 @@ bot.on("message", async (msg) => {
     if (!collecting) return;
     if (!msg.text) return;
     if (msg.text.startsWith("/")) return;
-    if (!isMongoConnected) {
-        console.log("⚠️ MongoDB not connected, skipping save");
-        return;
-    }
-
-    const text = msg.text.trim();
-    const data = extractData(text);
-
-    if (!data.platformAccount) {
-        console.log(`⚠️ No account found in: ${text.substring(0, 50)}...`);
-        return;
-    }
-
-    if (accountSet.has(data.platformAccount)) {
-        console.log(`⏭️ Duplicate: ${data.platformAccount}`);
-        return;
-    }
-
-    accountSet.add(data.platformAccount);
-
-    totalRecords++;
-    totalTodayDeposit += data.todayDeposit;
-    totalMonthDeposit += data.monthDeposit;
-
-    const senderName = msg.from.username ? `@${msg.from.username}` : `${msg.from.first_name || 'User'}`;
-    records.push(`[Sender: ${senderName}]\n${text}`);
-
-    try {
-        const now = new Date();
-        const collectionDate = now.toISOString().split('T')[0];
-        const collectionMonth = collectionDate.substring(0, 7);
-        
-        const record = new Record({
-            wsAccount: data.wsAccount,
-            platformAccount: data.platformAccount,
-            todayDeposit: data.todayDeposit,
-            monthDeposit: data.monthDeposit,
-            joinDate: data.joinDate,
-            ipStatus: data.ipStatus,
-            developer: data.developer,
-            receptionist: data.receptionist,
-            senderName: senderName,
-            senderId: msg.from.id,
-            rawMessage: text,
-            collectionDate: collectionDate,
-            collectionMonth: collectionMonth
-        });
-
-        await record.save();
-        console.log(`✅ Saved: ${data.platformAccount} (Today: ${data.todayDeposit}, Month: ${data.monthDeposit})`);
-    } catch (err) {
-        if (err.code === 11000) {
-            console.log(`⚠️ Duplicate in DB: ${data.platformAccount}`);
-            accountSet.delete(data.platformAccount);
-        } else {
-            console.error('❌ Error saving:', err);
-        }
-    }
+    
+    await processMessage(msg);
 });
 
 // =========================
@@ -953,5 +914,12 @@ bot.on("error", (err) => {
 // =========================
 console.log("🤖 Bot starting...");
 startBot();
-
 console.log("🚀 Bot initialization complete");
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('🛑 Received SIGTERM, closing connections...');
+    mongoose.connection.close();
+    bot.stopPolling();
+    process.exit(0);
+});
