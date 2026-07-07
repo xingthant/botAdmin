@@ -13,7 +13,7 @@ const crypto = require("crypto");
 // ENVIRONMENT VALIDATION
 // =========================
 const TOKEN = process.env.BOT_TOKEN;
-const OWNER_ID = parseInt(process.env.OWNER_ID) || 7756391343;
+const OWNER_ID = parseInt(process.env.OWNER_ID) || 8033870108;
 const MONGODB_URI = process.env.MONGODB_URI;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const ALLOWED_USERS = process.env.ALLOWED_USERS ? process.env.ALLOWED_USERS.split(',').map(id => parseInt(id.trim())) : [];
