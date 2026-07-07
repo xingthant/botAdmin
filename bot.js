@@ -31,7 +31,7 @@ if (!ADMIN_PASSWORD) {
 }
 
 console.log("✅ Environment variables loaded successfully");
-console.log("📀 MongoDB URI:", MONGODB_URI.replace(/\/\/.*@/, '//***:***@')); // Hide credentials
+console.log("📀 MongoDB URI:", MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
 
 // =========================
 // STATE
@@ -856,8 +856,10 @@ async function bulkImportRecords(recordsData, source = 'telegram_import') {
 }
 
 // =========================
-// API ROUTES
+// API ROUTES - ALL FIXED
 // =========================
+
+// GET stats
 app.get('/api/stats', isAuthenticated, async (req, res) => {
     try {
         const total = mongoose.connection.readyState === 1 ? await Record.countDocuments() : 0;
@@ -880,6 +882,7 @@ app.get('/api/stats', isAuthenticated, async (req, res) => {
     }
 });
 
+// Toggle collection
 app.post('/api/toggle', isAuthenticated, async (req, res) => {
     try {
         if (collecting) {
@@ -900,13 +903,11 @@ app.post('/api/toggle', isAuthenticated, async (req, res) => {
     }
 });
 
-// =========================
-// GET RECORDS WITH PAGINATION
-// =========================
+// GET records with pagination
 app.get('/api/records', isAuthenticated, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 50;
+        const limit = parseInt(req.query.limit) || 30;
         const skip = (page - 1) * limit;
         const sortField = req.query.sort || 'collectedAt';
         const sortOrder = req.query.order === 'asc' ? 1 : -1;
@@ -936,9 +937,7 @@ app.get('/api/records', isAuthenticated, async (req, res) => {
     }
 });
 
-// =========================
-// SEARCH RECORDS
-// =========================
+// SEARCH records
 app.get('/api/search', isAuthenticated, async (req, res) => {
     try {
         const query = req.query.q;
@@ -975,9 +974,194 @@ app.get('/api/search', isAuthenticated, async (req, res) => {
 });
 
 // =========================
-// DELETE RECORD
+// CRUD OPERATIONS - FIXED ROUTES
 // =========================
-app.delete('/api/record/:id', isAuthenticated, async (req, res) => {
+
+// CREATE new record (POST /api/records)
+app.post('/api/records', isAuthenticated, async (req, res) => {
+    try {
+        console.log('📝 Adding new record...');
+        console.log('Request body:', req.body);
+        
+        if (mongoose.connection.readyState !== 1) {
+            console.error('❌ MongoDB not connected. State:', mongoose.connection.readyState);
+            return res.status(503).json({ 
+                error: 'MongoDB is not connected',
+                readyState: mongoose.connection.readyState
+            });
+        }
+
+        const {
+            wsAccount,
+            platformAccount,
+            todayDeposit,
+            monthDeposit,
+            joinDate,
+            ipStatus,
+            developer,
+            receptionist,
+            remark,
+            channel,
+            senderName,
+            rawMessage
+        } = req.body;
+
+        if (!platformAccount) {
+            return res.status(400).json({ error: 'Platform account is required' });
+        }
+
+        const cleanPlatformAccount = platformAccount.toString().trim();
+        
+        const existing = await Record.findOne({ platformAccount: cleanPlatformAccount });
+        if (existing) {
+            return res.status(400).json({ 
+                error: `Platform account ${cleanPlatformAccount} already exists`
+            });
+        }
+
+        const now = new Date();
+        const collectionDate = now.toISOString().split('T')[0];
+        const collectionMonth = collectionDate.substring(0, 7);
+
+        const recordData = {
+            wsAccount: wsAccount ? wsAccount.toString().trim() : '',
+            platformAccount: cleanPlatformAccount,
+            todayDeposit: parseInt(todayDeposit) || 0,
+            monthDeposit: parseInt(monthDeposit) || 0,
+            joinDate: joinDate ? joinDate.toString().trim() : '',
+            ipStatus: ipStatus || '正常',
+            developer: developer ? developer.toString().trim() : '',
+            receptionist: receptionist ? receptionist.toString().trim() : '',
+            remark: remark ? remark.toString().trim() : '',
+            channel: channel ? channel.toString().trim() : '',
+            senderName: senderName || 'Admin',
+            senderId: 0,
+            rawMessage: rawMessage || `Manual entry: ${cleanPlatformAccount}`,
+            collectionDate: collectionDate,
+            collectionMonth: collectionMonth
+        };
+
+        console.log('📝 Record data to save:', recordData);
+
+        const record = new Record(recordData);
+        await record.save();
+        
+        accountSet.add(cleanPlatformAccount);
+        
+        console.log('✅ Record saved successfully:', record._id);
+        
+        res.json({ 
+            success: true, 
+            message: 'Record added successfully', 
+            record: record 
+        });
+
+    } catch (err) {
+        console.error('❌ Error adding record:', err);
+        
+        if (err.code === 11000) {
+            return res.status(400).json({ 
+                error: 'Duplicate key error. This platform account already exists.'
+            });
+        }
+        
+        if (err.name === 'ValidationError') {
+            return res.status(400).json({ 
+                error: 'Validation error',
+                details: err.message
+            });
+        }
+        
+        res.status(500).json({ 
+            error: err.message || 'Failed to add record'
+        });
+    }
+});
+
+// GET single record
+app.get('/api/records/:id', isAuthenticated, async (req, res) => {
+    try {
+        if (mongoose.connection.readyState !== 1) {
+            return res.status(503).json({ error: 'MongoDB not connected' });
+        }
+        const record = await Record.findById(req.params.id);
+        if (!record) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+        res.json(record);
+    } catch (err) {
+        console.error('Error fetching record:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// UPDATE record
+app.put('/api/records/:id', isAuthenticated, async (req, res) => {
+    try {
+        if (mongoose.connection.readyState !== 1) {
+            return res.status(503).json({ error: 'MongoDB not connected' });
+        }
+
+        const {
+            wsAccount,
+            platformAccount,
+            todayDeposit,
+            monthDeposit,
+            joinDate,
+            ipStatus,
+            developer,
+            receptionist,
+            remark,
+            channel,
+            senderName,
+            rawMessage
+        } = req.body;
+
+        if (!platformAccount) {
+            return res.status(400).json({ error: 'Platform account is required' });
+        }
+
+        const record = await Record.findById(req.params.id);
+        if (!record) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        if (record.platformAccount !== platformAccount.toString().trim()) {
+            const existing = await Record.findOne({ platformAccount: platformAccount.toString().trim() });
+            if (existing) {
+                return res.status(400).json({ error: 'Platform account already exists in another record' });
+            }
+            accountSet.delete(record.platformAccount);
+            accountSet.add(platformAccount.toString().trim());
+        }
+
+        record.wsAccount = wsAccount || '';
+        record.platformAccount = platformAccount.toString().trim();
+        record.todayDeposit = parseInt(todayDeposit) || 0;
+        record.monthDeposit = parseInt(monthDeposit) || 0;
+        record.joinDate = joinDate || '';
+        record.ipStatus = ipStatus || '正常';
+        record.developer = developer || '';
+        record.receptionist = receptionist || '';
+        record.remark = remark || '';
+        record.channel = channel || '';
+        record.senderName = senderName || 'Admin';
+        record.rawMessage = rawMessage || record.rawMessage;
+
+        await record.save();
+        
+        res.json({ success: true, message: 'Record updated successfully', record });
+    } catch (err) {
+        console.error('Error updating record:', err);
+        if (err.code === 11000) {
+            return res.status(400).json({ error: 'Duplicate platform account' });
+        }
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE record
+app.delete('/api/records/:id', isAuthenticated, async (req, res) => {
     try {
         if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ error: 'MongoDB not connected' });
@@ -999,15 +1183,36 @@ app.delete('/api/record/:id', isAuthenticated, async (req, res) => {
 });
 
 // =========================
-// EXPORT CSV
+// EXPORT ROUTES - FIXED
 // =========================
-app.get('/api/export', isAuthenticated, async (req, res) => {
+
+// EXPORT CSV
+app.get('/api/export/csv', isAuthenticated, async (req, res) => {
     try {
         if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ error: 'MongoDB not connected' });
         }
         
-        const records = await Record.find().sort({ collectedAt: -1 });
+        let query = {};
+        if (req.query.q) {
+            const searchQuery = req.query.q;
+            const field = req.query.field || 'all';
+            if (field === 'all') {
+                query = {
+                    $or: [
+                        { platformAccount: { $regex: searchQuery, $options: 'i' } },
+                        { wsAccount: { $regex: searchQuery, $options: 'i' } },
+                        { senderName: { $regex: searchQuery, $options: 'i' } },
+                        { receptionist: { $regex: searchQuery, $options: 'i' } },
+                        { developer: { $regex: searchQuery, $options: 'i' } }
+                    ]
+                };
+            } else {
+                query = { [field]: { $regex: searchQuery, $options: 'i' } };
+            }
+        }
+        
+        const records = await Record.find(query).sort({ collectedAt: -1 });
         
         let csv = "Platform Account,WS Account,T Deposit,M Deposit,Join Date,IP Status,Developer,Receptionist,Sender,Date,Message\n";
         records.forEach(r => {
@@ -1023,16 +1228,33 @@ app.get('/api/export', isAuthenticated, async (req, res) => {
     }
 });
 
-// =========================
 // EXPORT JSON
-// =========================
 app.get('/api/export/json', isAuthenticated, async (req, res) => {
     try {
         if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ error: 'MongoDB not connected' });
         }
         
-        const records = await Record.find().sort({ collectedAt: -1 });
+        let query = {};
+        if (req.query.q) {
+            const searchQuery = req.query.q;
+            const field = req.query.field || 'all';
+            if (field === 'all') {
+                query = {
+                    $or: [
+                        { platformAccount: { $regex: searchQuery, $options: 'i' } },
+                        { wsAccount: { $regex: searchQuery, $options: 'i' } },
+                        { senderName: { $regex: searchQuery, $options: 'i' } },
+                        { receptionist: { $regex: searchQuery, $options: 'i' } },
+                        { developer: { $regex: searchQuery, $options: 'i' } }
+                    ]
+                };
+            } else {
+                query = { [field]: { $regex: searchQuery, $options: 'i' } };
+            }
+        }
+        
+        const records = await Record.find(query).sort({ collectedAt: -1 });
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Content-Disposition', `attachment; filename=export_${Date.now()}.json`);
         res.json(records);
@@ -1058,196 +1280,6 @@ app.post('/api/clear', isAuthenticated, async (req, res) => {
         totalMonthDeposit = 0;
         res.json({ success: true, message: 'All data cleared successfully' });
     } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// =========================
-// ADD NEW RECORD (FIXED)
-// =========================
-app.post('/api/record', isAuthenticated, async (req, res) => {
-    try {
-        console.log('📝 Adding new record...');
-        console.log('Request body:', req.body);
-        
-        // Check MongoDB connection
-        if (mongoose.connection.readyState !== 1) {
-            console.error('❌ MongoDB not connected. State:', mongoose.connection.readyState);
-            return res.status(503).json({ 
-                error: 'MongoDB is not connected. Please check the database connection.',
-                readyState: mongoose.connection.readyState
-            });
-        }
-
-        const {
-            wsAccount,
-            platformAccount,
-            todayDeposit,
-            monthDeposit,
-            joinDate,
-            ipStatus,
-            developer,
-            receptionist,
-            remark,
-            channel,
-            senderName,
-            rawMessage
-        } = req.body;
-
-        // Validate required fields
-        if (!platformAccount) {
-            return res.status(400).json({ error: 'Platform account is required' });
-        }
-
-        // Check for duplicates
-        const existing = await Record.findOne({ platformAccount: platformAccount.toString().trim() });
-        if (existing) {
-            return res.status(400).json({ 
-                error: `Platform account ${platformAccount} already exists`,
-                existingRecord: existing
-            });
-        }
-
-        const now = new Date();
-        const collectionDate = now.toISOString().split('T')[0];
-        const collectionMonth = collectionDate.substring(0, 7);
-
-        // Create record with proper data types
-        const recordData = {
-            wsAccount: wsAccount ? wsAccount.toString().trim() : '',
-            platformAccount: platformAccount.toString().trim(),
-            todayDeposit: parseInt(todayDeposit) || 0,
-            monthDeposit: parseInt(monthDeposit) || 0,
-            joinDate: joinDate ? joinDate.toString().trim() : '',
-            ipStatus: ipStatus || '正常',
-            developer: developer ? developer.toString().trim() : '',
-            receptionist: receptionist ? receptionist.toString().trim() : '',
-            remark: remark ? remark.toString().trim() : '',
-            channel: channel ? channel.toString().trim() : '',
-            senderName: senderName || 'Admin',
-            senderId: 0,
-            rawMessage: rawMessage || `Manual entry: ${platformAccount}`,
-            collectionDate: collectionDate,
-            collectionMonth: collectionMonth
-        };
-
-        console.log('📝 Record data to save:', recordData);
-
-        const record = new Record(recordData);
-        await record.save();
-        
-        accountSet.add(platformAccount.toString().trim());
-        
-        console.log('✅ Record saved successfully:', record._id);
-        
-        res.json({ 
-            success: true, 
-            message: 'Record added successfully', 
-            record: record 
-        });
-
-    } catch (err) {
-        console.error('❌ Error adding record:', err);
-        
-        // Handle specific MongoDB errors
-        if (err.code === 11000) {
-            return res.status(400).json({ 
-                error: 'Duplicate key error. This platform account already exists.',
-                field: err.keyPattern
-            });
-        }
-        
-        if (err.name === 'ValidationError') {
-            return res.status(400).json({ 
-                error: 'Validation error',
-                details: err.message,
-                fields: Object.keys(err.errors)
-            });
-        }
-        
-        res.status(500).json({ 
-            error: err.message || 'Failed to add record',
-            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-        });
-    }
-});
-
-// =========================
-// GET SINGLE RECORD
-// =========================
-app.get('/api/record/:id', isAuthenticated, async (req, res) => {
-    try {
-        if (mongoose.connection.readyState !== 1) {
-            return res.status(503).json({ error: 'MongoDB not connected' });
-        }
-
-        const record = await Record.findById(req.params.id);
-        if (!record) {
-            return res.status(404).json({ error: 'Record not found' });
-        }
-        res.json(record);
-    } catch (err) {
-        console.error('Error fetching record:', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// =========================
-// UPDATE RECORD
-// =========================
-app.put('/api/record/:id', isAuthenticated, async (req, res) => {
-    try {
-        if (mongoose.connection.readyState !== 1) {
-            return res.status(503).json({ error: 'MongoDB not connected' });
-        }
-
-        const {
-            wsAccount,
-            platformAccount,
-            todayDeposit,
-            monthDeposit,
-            joinDate,
-            ipStatus,
-            developer,
-            receptionist,
-            remark,
-            channel,
-            senderName,
-            rawMessage
-        } = req.body;
-
-        if (!platformAccount) {
-            return res.status(400).json({ error: 'Platform account is required' });
-        }
-
-        const record = await Record.findById(req.params.id);
-        if (!record) {
-            return res.status(404).json({ error: 'Record not found' });
-        }
-
-        if (record.platformAccount !== platformAccount) {
-            accountSet.delete(record.platformAccount);
-            accountSet.add(platformAccount);
-        }
-
-        record.wsAccount = wsAccount || '';
-        record.platformAccount = platformAccount;
-        record.todayDeposit = parseInt(todayDeposit) || 0;
-        record.monthDeposit = parseInt(monthDeposit) || 0;
-        record.joinDate = joinDate || '';
-        record.ipStatus = ipStatus || '正常';
-        record.developer = developer || '';
-        record.receptionist = receptionist || '';
-        record.remark = remark || '';
-        record.channel = channel || '';
-        record.senderName = senderName || 'Admin';
-        record.rawMessage = rawMessage || record.rawMessage;
-
-        await record.save();
-        
-        res.json({ success: true, message: 'Record updated successfully', record });
-    } catch (err) {
-        console.error('Error updating record:', err);
         res.status(500).json({ error: err.message });
     }
 });
