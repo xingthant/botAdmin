@@ -13,7 +13,7 @@ const crypto = require("crypto");
 // ENVIRONMENT VALIDATION
 // =========================
 const TOKEN = process.env.BOT_TOKEN;
-const OWNER_ID = parseInt(process.env.OWNER_ID) || 8033870108;
+const OWNER_ID = parseInt(process.env.OWNER_ID) || 7756391343;
 const MONGODB_URI = process.env.MONGODB_URI;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
@@ -31,6 +31,7 @@ if (!ADMIN_PASSWORD) {
 }
 
 console.log("✅ Environment variables loaded successfully");
+console.log("📀 MongoDB URI:", MONGODB_URI.replace(/\/\/.*@/, '//***:***@')); // Hide credentials
 
 // =========================
 // STATE
@@ -65,12 +66,11 @@ const bot = new TelegramBot(TOKEN, {
 });
 
 // =========================
-// EXTRACT DATA FUNCTION - ENHANCED
+// EXTRACT DATA FUNCTION
 // =========================
 function extractData(text) {
     console.log('🔍 Processing text...');
     
-    // If text is an array, join it
     let cleanText = '';
     if (Array.isArray(text)) {
         cleanText = text.map(item => {
@@ -82,7 +82,6 @@ function extractData(text) {
         cleanText = text;
     }
     
-    // Clean up text - remove extra spaces and normalize
     cleanText = cleanText.replace(/\s+/g, ' ').trim();
     
     // Extract WS Account
@@ -91,8 +90,6 @@ function extractData(text) {
     if (wsMatch) {
         wsAccount = wsMatch[1].trim();
     }
-    
-    // If no WS account found, try alternate format
     if (!wsAccount) {
         const altWsMatch = cleanText.match(/(?:Ws账号|WS账号|ws账号)[\s]*[:：][\s]*(\d+)/);
         if (altWsMatch) {
@@ -100,22 +97,18 @@ function extractData(text) {
         }
     }
     
-    // Extract Platform Account - handle both Chinese and English
+    // Extract Platform Account
     let platformAccount = null;
     const accountMatch = cleanText.match(/(?:平台账号|会员账户|会员账号|平台帐号|会员帐号)[\s\u3000]*[：:；;][\s\u3000]*(\d+)/i);
     if (accountMatch) {
         platformAccount = accountMatch[1].trim();
     }
-    
-    // If no platform account found, try alternate format
     if (!platformAccount) {
         const altAccountMatch = cleanText.match(/(?:平台账号|会员账户)[\s]*[:：][\s]*(\d+)/);
         if (altAccountMatch) {
             platformAccount = altAccountMatch[1].trim();
         }
     }
-    
-    // If still no platform account, try to find any 10-13 digit number that's not the WS account
     if (!platformAccount) {
         const allNumbers = cleanText.match(/\b(\d{10,13})\b/g);
         if (allNumbers) {
@@ -131,14 +124,12 @@ function extractData(text) {
         }
     }
     
-    // Extract Join Date - handle multiple formats
+    // Extract Join Date
     let joinDate = '';
     const dateMatch = cleanText.match(/(?:进粉日期|粉日期|日期|进粉)[\s\u3000]*[：:；;][\s\u3000]*([^\s\n]+)/i);
     if (dateMatch) {
         joinDate = dateMatch[1].trim();
     }
-    
-    // If no date found, try alternate format
     if (!joinDate) {
         const altDateMatch = cleanText.match(/(?:进粉日期|粉日期)[\s]*[:：][\s]*([^\s\n]+)/);
         if (altDateMatch) {
@@ -188,8 +179,6 @@ function extractData(text) {
     if (monthMatch) {
         monthDeposit = parseInt(monthMatch[1], 10) || 0;
     }
-    
-    // If month deposit not found, try with Unicode characters
     if (!monthMatch) {
         const altMonthMatch = cleanText.match(/本月首存[\s]*[:：][\s]*(\d+)/);
         if (altMonthMatch) {
@@ -197,7 +186,7 @@ function extractData(text) {
         }
     }
 
-    // Extract additional fields if present
+    // Extract additional fields
     let remark = '';
     const remarkMatch = cleanText.match(/(?:备注|备注)[\s\u3000]*[：:；;][\s\u3000]*([^\n]+)/i);
     if (remarkMatch) {
@@ -229,7 +218,7 @@ function extractData(text) {
 }
 
 // =========================
-// PARSE TELEGRAM EXPORT - SPECIFIC FOR YOUR JSON FORMAT
+// PARSE TELEGRAM EXPORT
 // =========================
 function parseTelegramExport(jsonData) {
     try {
@@ -241,15 +230,12 @@ function parseTelegramExport(jsonData) {
         let records = [];
         console.log('📊 Parsing JSON data...');
         
-        // Handle your specific Telegram export format
         if (data.messages && Array.isArray(data.messages)) {
             console.log('✅ Found messages array with', data.messages.length, 'items');
             
-            // Filter only message type (not service) and extract text
             const messageRecords = data.messages
                 .filter(msg => msg.type === 'message' && msg.text)
                 .map(msg => {
-                    // Extract text from the message
                     let text = '';
                     if (Array.isArray(msg.text)) {
                         text = msg.text.map(item => {
@@ -261,14 +247,10 @@ function parseTelegramExport(jsonData) {
                         text = msg.text;
                     }
                     
-                    // Extract data from the text
                     const extracted = extractData(text);
-                    
-                    // Add sender info if available
                     if (msg.from) {
                         extracted.senderName = msg.from;
                     }
-                    
                     return extracted;
                 })
                 .filter(r => r && r.platformAccount);
@@ -276,7 +258,7 @@ function parseTelegramExport(jsonData) {
             records = messageRecords;
             console.log(`✅ Extracted ${records.length} records from messages`);
         } else {
-            // Fallback to generic parsing
+            // Fallback parsing
             console.log('🔍 Using generic parsing...');
             
             if (Array.isArray(data)) {
@@ -285,10 +267,7 @@ function parseTelegramExport(jsonData) {
                 records = data.records;
             } else if (data.data && Array.isArray(data.data)) {
                 records = data.data;
-            } else if (data.result && Array.isArray(data.result)) {
-                records = data.result;
             } else {
-                // Try to find any array in the object
                 for (const key in data) {
                     if (Array.isArray(data[key]) && data[key].length > 0) {
                         records = data[key];
@@ -297,7 +276,6 @@ function parseTelegramExport(jsonData) {
                 }
             }
             
-            // Normalize records
             records = records.map(r => {
                 if (typeof r === 'string') {
                     return extractData(r);
@@ -325,12 +303,9 @@ function parseTelegramExport(jsonData) {
         }
         
         console.log(`✅ Total valid records: ${records.length}`);
-        
-        // Log first few records for debugging
         if (records.length > 0) {
             console.log('📋 First record sample:', JSON.stringify(records[0], null, 2));
         }
-        
         return records;
         
     } catch (err) {
@@ -509,6 +484,7 @@ async function loadExistingAccounts() {
 // =========================
 async function connectMongoDB() {
     try {
+        console.log('📀 Connecting to MongoDB...');
         await mongoose.connect(MONGODB_URI, {
             serverSelectionTimeoutMS: 10000,
             socketTimeoutMS: 45000,
@@ -924,6 +900,9 @@ app.post('/api/toggle', isAuthenticated, async (req, res) => {
     }
 });
 
+// =========================
+// GET RECORDS WITH PAGINATION
+// =========================
 app.get('/api/records', isAuthenticated, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -957,6 +936,9 @@ app.get('/api/records', isAuthenticated, async (req, res) => {
     }
 });
 
+// =========================
+// SEARCH RECORDS
+// =========================
 app.get('/api/search', isAuthenticated, async (req, res) => {
     try {
         const query = req.query.q;
@@ -992,6 +974,9 @@ app.get('/api/search', isAuthenticated, async (req, res) => {
     }
 });
 
+// =========================
+// DELETE RECORD
+// =========================
 app.delete('/api/record/:id', isAuthenticated, async (req, res) => {
     try {
         if (mongoose.connection.readyState !== 1) {
@@ -1013,6 +998,9 @@ app.delete('/api/record/:id', isAuthenticated, async (req, res) => {
     }
 });
 
+// =========================
+// EXPORT CSV
+// =========================
 app.get('/api/export', isAuthenticated, async (req, res) => {
     try {
         if (mongoose.connection.readyState !== 1) {
@@ -1035,6 +1023,9 @@ app.get('/api/export', isAuthenticated, async (req, res) => {
     }
 });
 
+// =========================
+// EXPORT JSON
+// =========================
 app.get('/api/export/json', isAuthenticated, async (req, res) => {
     try {
         if (mongoose.connection.readyState !== 1) {
@@ -1050,6 +1041,9 @@ app.get('/api/export/json', isAuthenticated, async (req, res) => {
     }
 });
 
+// =========================
+// CLEAR ALL DATA
+// =========================
 app.post('/api/clear', isAuthenticated, async (req, res) => {
     try {
         if (mongoose.connection.readyState !== 1) {
@@ -1068,10 +1062,21 @@ app.post('/api/clear', isAuthenticated, async (req, res) => {
     }
 });
 
+// =========================
+// ADD NEW RECORD (FIXED)
+// =========================
 app.post('/api/record', isAuthenticated, async (req, res) => {
     try {
+        console.log('📝 Adding new record...');
+        console.log('Request body:', req.body);
+        
+        // Check MongoDB connection
         if (mongoose.connection.readyState !== 1) {
-            return res.status(503).json({ error: 'MongoDB not connected' });
+            console.error('❌ MongoDB not connected. State:', mongoose.connection.readyState);
+            return res.status(503).json({ 
+                error: 'MongoDB is not connected. Please check the database connection.',
+                readyState: mongoose.connection.readyState
+            });
         }
 
         const {
@@ -1089,47 +1094,87 @@ app.post('/api/record', isAuthenticated, async (req, res) => {
             rawMessage
         } = req.body;
 
+        // Validate required fields
         if (!platformAccount) {
             return res.status(400).json({ error: 'Platform account is required' });
         }
 
-        const existing = await Record.findOne({ platformAccount });
+        // Check for duplicates
+        const existing = await Record.findOne({ platformAccount: platformAccount.toString().trim() });
         if (existing) {
-            return res.status(400).json({ error: 'Platform account already exists' });
+            return res.status(400).json({ 
+                error: `Platform account ${platformAccount} already exists`,
+                existingRecord: existing
+            });
         }
 
         const now = new Date();
         const collectionDate = now.toISOString().split('T')[0];
         const collectionMonth = collectionDate.substring(0, 7);
 
-        const record = new Record({
-            wsAccount: wsAccount || '',
-            platformAccount: platformAccount,
+        // Create record with proper data types
+        const recordData = {
+            wsAccount: wsAccount ? wsAccount.toString().trim() : '',
+            platformAccount: platformAccount.toString().trim(),
             todayDeposit: parseInt(todayDeposit) || 0,
             monthDeposit: parseInt(monthDeposit) || 0,
-            joinDate: joinDate || '',
+            joinDate: joinDate ? joinDate.toString().trim() : '',
             ipStatus: ipStatus || '正常',
-            developer: developer || '',
-            receptionist: receptionist || '',
-            remark: remark || '',
-            channel: channel || '',
+            developer: developer ? developer.toString().trim() : '',
+            receptionist: receptionist ? receptionist.toString().trim() : '',
+            remark: remark ? remark.toString().trim() : '',
+            channel: channel ? channel.toString().trim() : '',
             senderName: senderName || 'Admin',
             senderId: 0,
             rawMessage: rawMessage || `Manual entry: ${platformAccount}`,
             collectionDate: collectionDate,
             collectionMonth: collectionMonth
+        };
+
+        console.log('📝 Record data to save:', recordData);
+
+        const record = new Record(recordData);
+        await record.save();
+        
+        accountSet.add(platformAccount.toString().trim());
+        
+        console.log('✅ Record saved successfully:', record._id);
+        
+        res.json({ 
+            success: true, 
+            message: 'Record added successfully', 
+            record: record 
         });
 
-        await record.save();
-        accountSet.add(platformAccount);
-        
-        res.json({ success: true, message: 'Record added successfully', record });
     } catch (err) {
-        console.error('Error adding record:', err);
-        res.status(500).json({ error: err.message });
+        console.error('❌ Error adding record:', err);
+        
+        // Handle specific MongoDB errors
+        if (err.code === 11000) {
+            return res.status(400).json({ 
+                error: 'Duplicate key error. This platform account already exists.',
+                field: err.keyPattern
+            });
+        }
+        
+        if (err.name === 'ValidationError') {
+            return res.status(400).json({ 
+                error: 'Validation error',
+                details: err.message,
+                fields: Object.keys(err.errors)
+            });
+        }
+        
+        res.status(500).json({ 
+            error: err.message || 'Failed to add record',
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
     }
 });
 
+// =========================
+// GET SINGLE RECORD
+// =========================
 app.get('/api/record/:id', isAuthenticated, async (req, res) => {
     try {
         if (mongoose.connection.readyState !== 1) {
@@ -1147,6 +1192,9 @@ app.get('/api/record/:id', isAuthenticated, async (req, res) => {
     }
 });
 
+// =========================
+// UPDATE RECORD
+// =========================
 app.put('/api/record/:id', isAuthenticated, async (req, res) => {
     try {
         if (mongoose.connection.readyState !== 1) {
@@ -1205,6 +1253,27 @@ app.put('/api/record/:id', isAuthenticated, async (req, res) => {
 });
 
 // =========================
+// DATABASE STATUS ENDPOINT
+// =========================
+app.get('/api/db-status', isAuthenticated, (req, res) => {
+    const stateMap = {
+        0: 'disconnected',
+        1: 'connected',
+        2: 'connecting',
+        3: 'disconnecting'
+    };
+    res.json({
+        readyState: mongoose.connection.readyState,
+        status: stateMap[mongoose.connection.readyState] || 'unknown',
+        host: mongoose.connection.host || 'N/A',
+        name: mongoose.connection.name || 'N/A',
+        isMongoConnected: isMongoConnected,
+        accountSetSize: accountSet.size,
+        queuedMessages: messageQueue.length
+    });
+});
+
+// =========================
 // START EXPRESS SERVER
 // =========================
 function startExpressServer() {
@@ -1212,6 +1281,7 @@ function startExpressServer() {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`🌐 Admin panel running on port ${PORT}`);
         console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+        console.log(`🔗 DB Status: http://localhost:${PORT}/api/db-status`);
     });
 }
 
