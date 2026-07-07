@@ -3,313 +3,408 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>All Records - Telegram Bot Admin</title>
+    <title>All Records — Systems Analytics Hub</title>
     <style>
+        :root {
+            --bg-main: #f8fafc;
+            --bg-card: #ffffff;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --success: #10b981;
+            --success-bg: #ecfdf5;
+            --success-text: #065f46;
+            --danger: #ef4444;
+            --danger-bg: #fef2f2;
+            --danger-text: #991b1b;
+            --warning: #f59e0b;
+            --warning-bg: #fffbe6;
+            --warning-text: #92400e;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+            --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #f0f2f5;
-            color: #333;
-            padding: 20px;
+            font-family: var(--font-stack);
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            padding: 40px 20px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
         }
+
         .container {
-            max-width: 1400px;
+            max-width: 1440px;
             margin: 0 auto;
         }
 
-        /* Navigation */
+        /* Top Elegant Navbar Layout */
         .navbar {
-            background: white;
-            padding: 20px 30px;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            background: var(--bg-card);
+            padding: 24px 32px;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
+            margin-bottom: 24px;
             flex-wrap: wrap;
-            gap: 15px;
+            gap: 20px;
         }
+
         .nav-left {
             display: flex;
-            align-items: center;
-            gap: 20px;
-            flex-wrap: wrap;
+            flex-direction: column;
+            gap: 4px;
         }
+
         .nav-left h2 {
-            font-size: 22px;
-            color: #333;
-            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-main);
+            letter-spacing: -0.02em;
         }
-        .record-count {
-            color: #888;
+
+        .nav-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
             font-size: 14px;
         }
+
         .back-link {
-            color: #007bff;
+            color: var(--primary);
             text-decoration: none;
-            font-size: 14px;
-            padding: 5px 12px;
-            border-radius: 4px;
-            transition: all 0.3s;
+            font-weight: 500;
+            transition: color 0.2s;
         }
+
         .back-link:hover {
-            background: #f0f7ff;
-            text-decoration: underline;
+            color: var(--primary-hover);
         }
+
+        .record-count {
+            color: var(--text-muted);
+            background: #f1f5f9;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
         .nav-right {
             display: flex;
             align-items: center;
             gap: 12px;
             flex-wrap: wrap;
         }
-        .logout-btn {
-            padding: 8px 20px;
-            background: #dc3545;
-            color: white;
-            border-radius: 6px;
-            text-decoration: none;
-            font-size: 14px;
-            transition: all 0.3s;
-            font-weight: 600;
-        }
-        .logout-btn:hover {
-            background: #c82333;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(220,53,69,0.3);
-        }
 
-        /* Search Section */
-        .search-section {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-        }
-        .search-section input {
-            flex: 1;
-            min-width: 200px;
-            padding: 12px 20px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: all 0.3s;
-        }
-        .search-section input:focus {
-            outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
-        }
-        .search-section select {
-            padding: 12px 20px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 14px;
-            background: white;
-            min-width: 150px;
-        }
+        /* Action Buttons Base Rules */
         .btn {
-            padding: 10px 24px;
-            border: none;
-            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 18px;
+            border: 1px solid transparent;
+            border-radius: var(--radius-sm);
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s ease;
+            white-space: nowrap;
         }
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
+
         .btn-primary {
-            background: #007bff;
+            background: var(--primary);
             color: white;
         }
         .btn-primary:hover {
-            background: #0056b3;
-        }
-        .btn-success {
-            background: #28a745;
-            color: white;
-        }
-        .btn-success:hover {
-            background: #218838;
-        }
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-        .btn-secondary:hover {
-            background: #5a6268;
-        }
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-        .btn-danger:hover {
-            background: #c82333;
-        }
-        .btn-info {
-            background: #17a2b8;
-            color: white;
-        }
-        .btn-info:hover {
-            background: #138496;
-        }
-        .btn-warning {
-            background: #ffc107;
-            color: #333;
-        }
-        .btn-warning:hover {
-            background: #e0a800;
+            background: var(--primary-hover);
         }
 
-        /* Table */
-        .table-container {
-            overflow-x: auto;
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        .btn-secondary {
+            background: var(--bg-card);
+            border-color: var(--border-color);
+            color: #334155;
         }
+        .btn-secondary:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+
+        .btn-danger {
+            background: #fff1f2;
+            color: var(--danger-text);
+            border-color: #fecdd3;
+        }
+        .btn-danger:hover {
+            background: #ffe4e6;
+        }
+
+        .logout-btn {
+            padding: 10px 18px;
+            background: #fff1f2;
+            color: var(--danger-text);
+            border-radius: var(--radius-sm);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+            border: 1px solid #fecdd3;
+        }
+        .logout-btn:hover {
+            background: #ffe4e6;
+        }
+
+        /* Search Section Panel Layout */
+        .search-section {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            background: var(--bg-card);
+            padding: 24px;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            align-items: center;
+        }
+
+        .search-input-wrapper {
+            flex: 1;
+            min-width: 280px;
+            position: relative;
+        }
+
+        .search-section input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            background-color: #f8fafc;
+            transition: all 0.2s;
+        }
+
+        .search-section input:focus {
+            outline: none;
+            background-color: #fff;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        .search-section select {
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            background: #f8fafc;
+            color: #334155;
+            min-width: 160px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .search-section select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        /* Data Panel / Table Structure Groupings */
+        .table-container {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 1000px;
-        }
-        thead {
-            background: #f8f9fa;
-        }
-        th {
-            padding: 12px 15px;
             text-align: left;
+        }
+
+        th {
+            background: #f8fafc;
+            padding: 16px 24px;
             font-size: 12px;
-            font-weight: 700;
-            color: #555;
+            font-weight: 600;
+            color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            white-space: nowrap;
-            position: sticky;
-            top: 0;
-            background: #f8f9fa;
-            z-index: 10;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border-color);
             cursor: pointer;
             user-select: none;
+            transition: background 0.2s;
         }
+
         th:hover {
-            background: #e9ecef;
+            background: #f1f5f9;
         }
+
         th .sort-icon {
-            margin-left: 5px;
-            font-size: 10px;
+            margin-left: 4px;
+            color: #94a3b8;
         }
+
         td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #f0f0f0;
-            font-size: 13px;
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 14px;
+            color: #334155;
             vertical-align: middle;
         }
-        tr:hover {
-            background: #f8f9fa;
+
+        tr:last-child td {
+            border-bottom: none;
         }
+
+        tr:hover td {
+            background-color: #f8fafc;
+        }
+
+        /* Specialized Premium Typography Classes */
+        .account-primary {
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .account-secondary {
+            font-weight: 500;
+            color: var(--primary);
+        }
+
         .deposit-today {
-            color: #28a745;
+            color: #047857;
             font-weight: 600;
         }
+
         .deposit-month {
-            color: #007bff;
+            color: #0369a1;
             font-weight: 600;
         }
+
+        /* Dynamic Status Badges */
         .badge {
-            display: inline-block;
-            padding: 3px 12px;
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
             border-radius: 12px;
             font-size: 12px;
             font-weight: 600;
+            line-height: 1;
         }
+
         .badge-success {
-            background: #d4edda;
-            color: #155724;
+            background: var(--success-bg);
+            color: var(--success-text);
         }
+
         .badge-danger {
-            background: #f8d7da;
-            color: #721c24;
+            background: var(--danger-bg);
+            color: var(--danger-text);
         }
-        .badge-warning {
-            background: #fff3cd;
-            color: #856404;
+
+        /* Micro Action Configurations */
+        .action-cell {
+            display: flex;
+            gap: 8px;
         }
+
         .btn-icon {
-            background: none;
-            border: none;
-            font-size: 18px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            font-size: 14px;
             cursor: pointer;
-            opacity: 0.6;
-            transition: all 0.3s;
-            padding: 5px 8px;
-            border-radius: 4px;
+            width: 34px;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius-sm);
+            transition: all 0.2s;
+            color: #475569;
         }
+
         .btn-icon:hover {
-            opacity: 1;
-            transform: scale(1.1);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
         }
+
         .btn-icon.edit:hover {
-            background: #e7f3ff;
+            color: var(--primary);
+            border-color: #c7d2fe;
+            background: #f5f3ff;
         }
+
         .btn-icon.delete:hover {
-            background: #fee;
+            color: var(--danger);
+            border-color: #fecdd3;
+            background: var(--danger-bg);
         }
+
         .truncate {
-            max-width: 150px;
+            max-width: 140px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
             display: inline-block;
         }
 
-        /* Pagination */
+        /* Modernized Elegant Pagination CSS */
         .pagination {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             justify-content: center;
-            margin-top: 20px;
-            flex-wrap: wrap;
+            align-items: center;
+            margin-top: 32px;
         }
+
         .page-btn {
-            padding: 8px 16px;
-            border: 1px solid #ddd;
-            background: white;
-            border-radius: 6px;
+            padding: 8px 14px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: #334155;
+            border-radius: var(--radius-sm);
             cursor: pointer;
-            transition: all 0.3s;
             font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
         }
-        .page-btn:hover {
-            background: #f0f0f0;
-            border-color: #bbb;
+
+        .page-btn:hover:not(:disabled) {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
         }
+
         .page-btn.active {
-            background: #007bff;
+            background: var(--primary);
             color: white;
-            border-color: #007bff;
+            border-color: var(--primary);
         }
-        .page-btn.active:hover {
-            background: #0056b3;
-        }
+
         .page-btn:disabled {
-            opacity: 0.5;
+            opacity: 0.4;
             cursor: not-allowed;
         }
 
-        /* Modal */
+        /* Clean Glass Overlay Modals & Form Drawers */
         .modal {
             display: none;
             position: fixed;
@@ -318,212 +413,190 @@
             top: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
-            animation: fadeIn 0.3s;
+            background: rgba(15, 23, 42, 0.3);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
         }
+
         .modal.active {
             display: flex;
-            justify-content: center;
-            align-items: center;
         }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        @keyframes slideUp {
-            from { transform: translateY(30px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
+
         .modal-content {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            max-width: 650px;
+            background: var(--bg-card);
+            padding: 32px;
+            border-radius: var(--radius-lg);
+            max-width: 600px;
             width: 90%;
-            max-height: 90vh;
+            max-height: 85vh;
             overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            animation: slideUp 0.3s ease;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border-color);
         }
+
         .modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid #f0f0f0;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
         }
+
         .modal-header h2 {
-            margin: 0;
-            font-size: 22px;
-            color: #333;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
         }
+
         .modal-close {
             background: none;
             border: none;
-            font-size: 28px;
+            font-size: 20px;
             cursor: pointer;
-            color: #999;
-            transition: all 0.3s;
-            padding: 0 10px;
+            color: var(--text-muted);
+            transition: color 0.2s;
         }
         .modal-close:hover {
-            color: #333;
-            transform: rotate(90deg);
+            color: var(--text-main);
         }
+
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
+
         .form-group label {
             display: block;
-            margin-bottom: 5px;
-            color: #555;
+            margin-bottom: 6px;
+            color: #334155;
             font-weight: 600;
             font-size: 13px;
         }
+
         .form-group input,
         .form-group textarea,
         .form-group select {
             width: 100%;
-            padding: 10px 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
+            padding: 10px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
             font-size: 14px;
-            transition: all 0.3s;
+            background: #fff;
+            color: var(--text-main);
+            transition: border-color 0.2s, box-shadow 0.2s;
             font-family: inherit;
         }
+
         .form-group input:focus,
         .form-group textarea:focus,
         .form-group select:focus {
             outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
         }
-        .form-group textarea {
-            resize: vertical;
-            min-height: 60px;
-        }
+
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 15px;
+            gap: 16px;
         }
+
         .form-actions {
             display: flex;
-            gap: 10px;
-            margin-top: 20px;
+            gap: 12px;
+            margin-top: 28px;
             padding-top: 20px;
-            border-top: 2px solid #f0f0f0;
+            border-top: 1px solid var(--border-color);
         }
+
         .form-actions .btn {
             flex: 1;
         }
 
-        /* Notification */
+        /* System Dynamic Toasts Notification Panels */
         .notification {
             position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 25px;
-            border-radius: 10px;
+            bottom: 24px;
+            right: 24px;
+            padding: 16px 24px;
+            border-radius: var(--radius-md);
             color: white;
             font-weight: 600;
+            font-size: 14px;
             z-index: 2000;
-            animation: slideIn 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            max-width: 400px;
-        }
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        .notification.success {
-            background: #28a745;
-        }
-        .notification.error {
-            background: #dc3545;
-        }
-        .notification.info {
-            background: #17a2b8;
-        }
-        .notification.warning {
-            background: #ffc107;
-            color: #333;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        /* Empty State */
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .notification.success { background: var(--success); }
+        .notification.error { background: var(--danger); }
+        .notification.info { background: var(--primary); }
+
+        /* Elegant Empty Visual Space styling */
         .empty-state {
             text-align: center;
-            padding: 60px 20px;
-            color: #999;
-        }
-        .empty-state .icon {
-            font-size: 48px;
-            margin-bottom: 10px;
+            padding: 64px 24px;
         }
 
-        /* Responsive */
-        @media (max-width: 768px) {
-            .navbar {
-                flex-direction: column;
-                align-items: stretch;
-                padding: 15px;
-            }
-            .nav-left {
-                flex-wrap: wrap;
-            }
-            .search-section {
-                flex-direction: column;
-            }
-            .search-section input,
-            .search-section select {
-                width: 100%;
-            }
-            .form-row {
-                grid-template-columns: 1fr;
-            }
-            .modal-content {
-                padding: 20px;
-                width: 95%;
-            }
-            th, td {
-                padding: 8px 10px;
-                font-size: 12px;
-            }
-            .btn {
-                width: 100%;
-                text-align: center;
-            }
+        .empty-state .icon {
+            font-size: 40px;
+            margin-bottom: 12px;
+            color: #94a3b8;
         }
-        @media (max-width: 480px) {
-            body {
-                padding: 10px;
-            }
-            .table-container {
-                padding: 10px;
-            }
+
+        .empty-state p {
+            color: var(--text-muted);
+            font-size: 15px;
+        }
+
+        /* Mobile Responsive Adjustments */
+        @media (max-width: 1024px) {
+            body { padding: 20px 12px; }
+            td, th { padding: 14px 16px; }
+        }
+
+        @media (max-width: 768px) {
+            .navbar { flex-direction: column; align-items: stretch; padding: 20px; }
+            .nav-right { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
+            .search-section { flex-direction: column; align-items: stretch; }
+            .form-row { grid-template-columns: 1fr; gap: 0; }
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- Dashboard Top Toolbar -->
         <nav class="navbar">
             <div class="nav-left">
-                <h2>📋 All Records</h2>
-                <a href="/dashboard" class="back-link">← Back to Dashboard</a>
-                <span class="record-count" id="recordCount">Loading...</span>
+                <h2>All Records</h2>
+                <div class="nav-meta">
+                    <a href="/dashboard" class="back-link">← Dashboard Overview</a>
+                    <span class="record-count" id="recordCount">Processing analytics...</span>
+                </div>
             </div>
             <div class="nav-right">
-                <button class="btn btn-success" onclick="openAddModal()">➕ Add New</button>
-                <button class="btn btn-info" onclick="exportCSV()">📥 Export CSV</button>
-                <button class="btn btn-secondary" onclick="exportJSON()">📄 Export JSON</button>
+                <button class="btn btn-primary" onclick="openAddModal()">➕ Add New Record</button>
+                <button class="btn btn-secondary" onclick="exportCSV()">📥 CSV</button>
+                <button class="btn btn-secondary" onclick="exportJSON()">📄 JSON</button>
                 <a href="/logout" class="logout-btn">🚪 Logout</a>
             </div>
         </nav>
 
+        <!-- Search Filtering Panel Component -->
         <div class="search-section">
-            <input type="text" id="searchInput" placeholder="🔍 Search by Ws账号, 平台账号, 推接待, 开发, or Sender..." 
-                   onkeypress="if(event.key==='Enter') searchRecords()">
+            <div class="search-input-wrapper">
+                <input type="text" id="searchInput" placeholder="Search by Ws Account, Platform, Receptionist, Developer, or Sender..." 
+                       onkeypress="if(event.key==='Enter') searchRecords()">
+            </div>
             <select id="searchField">
                 <option value="all">All Fields</option>
                 <option value="platformAccount">平台账号</option>
@@ -532,10 +605,11 @@
                 <option value="developer">开发</option>
                 <option value="senderName">Sender</option>
             </select>
-            <button class="btn btn-primary" onclick="searchRecords()">🔍 Search</button>
-            <button class="btn btn-secondary" onclick="resetSearch()">🔄 Reset</button>
+            <button class="btn btn-primary" onclick="searchRecords()">Apply Filters</button>
+            <button class="btn btn-secondary" onclick="resetSearch()">Reset</button>
         </div>
 
+        <!-- System Relational Main Datatable Grid -->
         <div class="table-container">
             <table>
                 <thead>
@@ -555,10 +629,10 @@
                 </thead>
                 <tbody id="recordsBody">
                     <tr>
-                        <td colspan="11" style="text-align:center; padding: 60px;">
+                        <td colspan="11" style="text-align:center;">
                             <div class="empty-state">
                                 <div class="icon">🔄</div>
-                                <p>Loading records...</p>
+                                <p>Syncing table architecture components...</p>
                             </div>
                         </td>
                     </tr>
@@ -566,9 +640,11 @@
             </table>
         </div>
 
+        <!-- Render Pagination Section UI Component -->
         <div class="pagination" id="pagination"></div>
     </div>
 
+    <!-- Smooth Backdrop-Filtered Form Overlay Drawer Model -->
     <div id="recordModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -580,12 +656,12 @@
                 
                 <div class="form-group">
                     <label>Ws账号</label>
-                    <input type="text" id="formWsAccount" placeholder="Enter Ws账号">
+                    <input type="text" id="formWsAccount" placeholder="Enter Telegram/WhatsApp/Ws ID">
                 </div>
                 
                 <div class="form-group">
-                    <label>平台账号 *</label>
-                    <input type="text" id="formPlatformAccount" placeholder="Enter platform account" required>
+                    <label>平台账号 / 会员账号 *</label>
+                    <input type="text" id="formPlatformAccount" placeholder="Required system identifier" required>
                 </div>
                 
                 <div class="form-row">
@@ -602,40 +678,40 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>进粉日期</label>
-                        <input type="text" id="formJoinDate" placeholder="e.g., 18/6 or 2024-06-18">
+                        <input type="text" id="formJoinDate" placeholder="e.g., 18/6 or 2026-07-07">
                     </div>
                     <div class="form-group">
                         <label>IP状态</label>
                         <select id="formIpStatus">
-                            <option value="正常">✅ 正常</option>
-                            <option value="异常">⚠️ 异常</option>
+                            <option value="正常">✅ 正常 (Normal)</option>
+                            <option value="异常">⚠️ 异常 (Anomaly Flag)</option>
                         </select>
                     </div>
                 </div>
                 
                 <div class="form-group">
                     <label>开发</label>
-                    <input type="text" id="formDeveloper" placeholder="Enter developer name">
+                    <input type="text" id="formDeveloper" placeholder="Developer / Source Account Assignment">
                 </div>
                 
                 <div class="form-group">
                     <label>推接待</label>
-                    <input type="text" id="formReceptionist" placeholder="Enter receptionist name">
+                    <input type="text" id="formReceptionist" placeholder="Receptionist handling name">
                 </div>
                 
                 <div class="form-group">
                     <label>Sender Name</label>
-                    <input type="text" id="formSenderName" placeholder="Enter sender name">
+                    <input type="text" id="formSenderName" placeholder="Admin/Bot Sender Label">
                 </div>
                 
                 <div class="form-group">
-                    <label>Raw Message</label>
-                    <textarea id="formRawMessage" placeholder="Enter the full message" rows="3"></textarea>
+                    <label>Raw Message Metadata Log</label>
+                    <textarea id="formRawMessage" placeholder="Paste full system incoming transaction logging hooks string text details if applicable..." rows="3"></textarea>
                 </div>
                 
                 <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary" id="saveBtn">💾 Save Record</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Discard</button>
+                    <button type="submit" class="btn btn-primary" id="saveBtn">Save Metrics</button>
                 </div>
             </form>
         </div>
@@ -649,11 +725,9 @@
         let totalRecords = 0;
         let sortField = '';
         let sortOrder = 'desc';
-        let recordsCached = []; // Cached array for handling active edit/delete items locally if needed
+        let recordsCached = [];
 
-        // =========================
-        // NOTIFICATION
-        // =========================
+        // Dynamic System Notifications Toasts Engine
         function showNotification(message, type = 'info') {
             const existing = document.querySelector('.notification');
             if (existing) existing.remove();
@@ -664,14 +738,14 @@
             document.body.appendChild(div);
             
             setTimeout(() => {
-                div.style.animation = 'slideIn 0.3s ease reverse';
-                setTimeout(() => div.remove(), 300);
-            }, 5000);
+                div.style.opacity = '0';
+                div.style.transform = 'translateY(10px)';
+                div.style.transition = 'all 0.2s';
+                setTimeout(() => div.remove(), 200);
+            }, 4000);
         }
 
-        // =========================
-        // SEARCH FUNCTIONS
-        // =========================
+        // Processing Application Engine Operations 
         function searchRecords() {
             const query = document.getElementById('searchInput').value.trim();
             const field = document.getElementById('searchField').value;
@@ -684,9 +758,7 @@
             }
             
             let url = `/api/search?q=${encodeURIComponent(query)}`;
-            if (field !== 'all') {
-                url += `&field=${encodeURIComponent(field)}`;
-            }
+            if (field !== 'all') url += `&field=${encodeURIComponent(field)}`;
             
             fetch(url)
                 .then(res => res.json())
@@ -694,11 +766,11 @@
                     recordsCached = data.records || [];
                     renderRecords(recordsCached);
                     document.getElementById('pagination').innerHTML = '';
-                    document.getElementById('recordCount').textContent = `${recordsCached.length} results found`;
+                    document.getElementById('recordCount').textContent = `${recordsCached.length} metrics captured`;
                 })
                 .catch(err => {
-                    console.error('Error searching:', err);
-                    showNotification('Error searching records', 'error');
+                    console.error(err);
+                    showNotification('Search filtering pipeline connection dropped.', 'error');
                 });
         }
 
@@ -710,16 +782,10 @@
             loadRecords(1);
         }
 
-        // =========================
-        // LOAD RECORDS
-        // =========================
         function loadRecords(page = 1) {
             currentPage = page;
             let url = `/api/records?page=${page}&limit=${limit}`;
-            
-            if (sortField) {
-                url += `&sort=${sortField}&order=${sortOrder}`;
-            }
+            if (sortField) url += `&sort=${sortField}&order=${sortOrder}`;
             
             fetch(url)
                 .then(res => res.json())
@@ -731,86 +797,65 @@
                     document.getElementById('recordCount').textContent = `Total: ${data.total} records`;
                 })
                 .catch(err => {
-                    console.error('Error loading records:', err);
-                    showNotification('Error loading records', 'error');
+                    console.error(err);
+                    showNotification('Error refreshing relational matrix payload streams.', 'error');
                 });
         }
 
-        // =========================
-        // RENDER RECORDS
-        // =========================
         function renderRecords(records) {
             const tbody = document.getElementById('recordsBody');
-            
             if (!records || records.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="11" style="text-align:center; padding: 60px;">
+                        <td colspan="11" style="text-align:center;">
                             <div class="empty-state">
                                 <div class="icon">📭</div>
-                                <p>No records found</p>
-                                <p style="font-size:12px; color:#bbb; margin-top:5px;">
-                                    ${currentQuery ? 'Try a different search term' : 'Start collecting data or add a new record'}
-                                </p>
+                                <p>No matching structured logs inside dashboard storage partition indexing parameters.</p>
                             </div>
                         </td>
-                    </tr>
-                `;
+                    </tr>`;
                 return;
             }
             
             tbody.innerHTML = records.map((r, index) => {
                 const startIndex = (currentPage - 1) * limit;
                 const num = startIndex + index + 1;
-                
-                const ipBadge = r.ipStatus && r.ipStatus.toLowerCase().includes('正常') 
-                    ? '<span class="badge badge-success">✓ 正常</span>' 
-                    : '<span class="badge badge-danger">⚠ 异常</span>';
+                const isNormal = r.ipStatus && r.ipStatus.toLowerCase().includes('正常');
+                const ipBadge = `<span class="badge ${isNormal ? 'badge-success' : 'badge-danger'}">${isNormal ? '✓ 正常' : '⚠ 异常'}</span>`;
                 
                 return `
                     <tr>
-                        <td>${num}</td>
-                        <td><strong>${r.wsAccount || '-'}</strong></td>
-                        <td><strong style="color:#007bff;">${r.platformAccount || '-'}</strong></td>
-                        <td>${r.receptionist || '-'}</td>
+                        <td style="color: var(--text-muted); font-size:12px;">${num}</td>
+                        <td class="account-primary">${r.wsAccount || '—'}</td>
+                        <td class="account-secondary">${r.platformAccount || '—'}</td>
+                        <td>${r.receptionist || '—'}</td>
                         <td>${ipBadge}</td>
-                        <td>${r.joinDate || '-'}</td>
-                        <td class="deposit-today">$${r.todayDeposit || 0}</td>
-                        <td class="deposit-month">$${r.monthDeposit || 0}</td>
-                        <td><span class="truncate" title="${r.developer || ''}">${r.developer || '-'}</span></td>
-                        <td><span class="truncate" title="${r.senderName || ''}">${r.senderName || '-'}</span></td>
+                        <td><span style="font-weight:500;">${r.joinDate || '—'}</span></td>
+                        <td class="deposit-today">¥${(r.todayDeposit || 0).toLocaleString()}</td>
+                        <td class="deposit-month">¥${(r.monthDeposit || 0).toLocaleString()}</td>
+                        <td><span class="truncate" title="${r.developer || ''}">${r.developer || '—'}</span></td>
+                        <td><span class="badge" style="background:#f1f5f9; color:#475569;">${r.senderName || '—'}</span></td>
                         <td>
-                            <button class="btn-icon edit" onclick="fetchAndEditRecord('${r._id}')" title="Edit record">✏️</button>
-                            <button class="btn-icon delete" onclick="deleteRecord('${r._id}')" title="Delete record">🗑️</button>
+                            <div class="action-cell">
+                                <button class="btn-icon edit" onclick="fetchAndEditRecord('${r._id}')">✏️</button>
+                                <button class="btn-icon delete" onclick="deleteRecord('${r._id}')">🗑️</button>
+                            </div>
                         </td>
-                    </tr>
-                `;
+                    </tr>`;
             }).join('');
         }
 
-        // =========================
-        // PAGINATION
-        // =========================
         function renderPagination(total, currentPage, totalPages) {
             const pagination = document.getElementById('pagination');
+            if (totalPages <= 1) { gap: 0; pagination.innerHTML = ''; return; }
             
-            if (totalPages <= 1) {
-                pagination.innerHTML = '';
-                return;
-            }
-            
-            let html = '';
-            
-            if (currentPage > 1) {
-                html += `<button class="page-btn" data-page="${currentPage - 1}">‹ Prev</button>`;
-            }
-            
+            let html = `<button class="page-btn" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>Previous</button>`;
             const startPage = Math.max(1, currentPage - 2);
             const endPage = Math.min(totalPages, currentPage + 2);
             
             if (startPage > 1) {
                 html += `<button class="page-btn" data-page="1">1</button>`;
-                if (startPage > 2) html += `<span style="padding:0 8px;">…</span>`;
+                if (startPage > 2) html += `<span style="padding:0 4px; color:#94a3b8;">…</span>`;
             }
             
             for (let i = startPage; i <= endPage; i++) {
@@ -818,18 +863,14 @@
             }
             
             if (endPage < totalPages) {
-                if (endPage < totalPages - 1) html += `<span style="padding:0 8px;">…</span>`;
+                if (endPage < totalPages - 1) html += `<span style="padding:0 4px; color:#94a3b8;">…</span>`;
                 html += `<button class="page-btn" data-page="${totalPages}">${totalPages}</button>`;
             }
             
-            if (currentPage < totalPages) {
-                html += `<button class="page-btn" data-page="${currentPage + 1}">Next ›</button>`;
-            }
-            
+            html += `<button class="page-btn" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>`;
             pagination.innerHTML = html;
         }
 
-        // Setup event delegation for pagination clicks
         document.getElementById('pagination').addEventListener('click', function(e) {
             if (e.target.classList.contains('page-btn')) {
                 const targetPage = parseInt(e.target.getAttribute('data-page'));
@@ -837,9 +878,6 @@
             }
         });
 
-        // =========================
-        // SORT TABLE
-        // =========================
         function sortTable(field) {
             if (sortField === field) {
                 sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
@@ -847,53 +885,38 @@
                 sortField = field;
                 sortOrder = 'desc';
             }
-            
-            // Update sort icons
-            document.querySelectorAll('th .sort-icon').forEach(el => {
-                el.textContent = '↕';
-            });
+            document.querySelectorAll('th .sort-icon').forEach(el => el.textContent = '↕');
             const ths = document.querySelectorAll('th');
             const index = ['index', 'wsAccount', 'platformAccount', 'receptionist', 'ipStatus', 'joinDate', 'todayDeposit', 'monthDeposit', 'developer', 'senderName'].indexOf(field);
             if (index !== -1 && ths[index]) {
                 ths[index].querySelector('.sort-icon').textContent = sortOrder === 'asc' ? '↑' : '↓';
             }
-            
-            if (currentQuery) {
-                searchRecords();
-            } else {
-                loadRecords(1);
-            }
+            if (currentQuery) searchRecords(); else loadRecords(1);
         }
 
-        // =========================
-        // MODAL FUNCTIONS
-        // =========================
+        // Overlay Modals Handling
         function openAddModal() {
-            document.getElementById('modalTitle').textContent = '➕ Add New Record';
+            document.getElementById('modalTitle').textContent = 'Add Management Track Metric';
             document.getElementById('editId').value = '';
             document.getElementById('recordForm').reset();
             document.getElementById('formTodayDeposit').value = '0';
             document.getElementById('formMonthDeposit').value = '0';
             document.getElementById('formIpStatus').value = '正常';
-            document.getElementById('saveBtn').textContent = '💾 Save Record';
+            document.getElementById('saveBtn').textContent = 'Add Log Metric';
             document.getElementById('recordModal').classList.add('active');
         }
 
         function fetchAndEditRecord(id) {
             const target = recordsCached.find(r => r._id === id);
-            if (target) {
-                openEditModal(target);
-            } else {
-                // Fallback option via API if not locally tracked
-                fetch(`/api/records/${id}`)
-                    .then(res => res.json())
-                    .then(record => openEditModal(record))
-                    .catch(err => showNotification('Error retrieving record specifics.', 'error'));
+            if (target) openEditModal(target);
+            else {
+                fetch(`/api/records/${id}`).then(res => res.json()).then(record => openEditModal(record))
+                .catch(() => showNotification('Error gathering contextual server object parameters.', 'error'));
             }
         }
 
         function openEditModal(record) {
-            document.getElementById('modalTitle').textContent = '✏️ Edit Record';
+            document.getElementById('modalTitle').textContent = 'Update Metrics Log Entry';
             document.getElementById('editId').value = record._id;
             document.getElementById('formWsAccount').value = record.wsAccount || '';
             document.getElementById('formPlatformAccount').value = record.platformAccount || '';
@@ -905,28 +928,16 @@
             document.getElementById('formReceptionist').value = record.receptionist || '';
             document.getElementById('formSenderName').value = record.senderName || '';
             document.getElementById('formRawMessage').value = record.rawMessage || '';
-            document.getElementById('saveBtn').textContent = '✏️ Update Record';
+            document.getElementById('saveBtn').textContent = 'Apply Modified Parameters';
             document.getElementById('recordModal').classList.add('active');
         }
 
-        function closeModal() {
-            document.getElementById('recordModal').classList.remove('active');
-        }
+        function closeModal() { document.getElementById('recordModal').classList.remove('active'); }
+        window.onclick = function(e) { if (e.target === document.getElementById('recordModal')) closeModal(); };
 
-        // Close modal clicking background layout bounds
-        window.onclick = function(event) {
-            const modal = document.getElementById('recordModal');
-            if (event.target === modal) {
-                closeModal();
-            }
-        };
-
-        // =========================
-        // SAVE RECORD
-        // =========================
+        // Data Management Syncing Operations
         function saveRecord(event) {
             event.preventDefault();
-            
             const editId = document.getElementById('editId').value;
             const data = {
                 wsAccount: document.getElementById('formWsAccount').value.trim(),
@@ -941,11 +952,6 @@
                 rawMessage: document.getElementById('formRawMessage').value.trim()
             };
 
-            if (!data.platformAccount) {
-                showNotification('⚠️ Platform Account is required!', 'error');
-                return;
-            }
-
             const method = editId ? 'PUT' : 'POST';
             const url = editId ? `/api/records/${editId}` : '/api/records';
 
@@ -954,45 +960,27 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             })
-            .then(res => {
-                if (!res.ok) throw new Error('Network error processing target request.');
-                return res.json();
-            })
-            .then(result => {
-                showNotification(editId ? '🎉 Record updated successfully' : '🎉 New record added successfully', 'success');
+            .then(res => { if (!res.ok) throw new Error(); return res.json(); })
+            .then(() => {
+                showNotification(editId ? 'Metric parameters rewritten.' : 'New relational log mapped.', 'success');
                 closeModal();
                 loadRecords(currentPage);
             })
-            .catch(err => {
-                console.error(err);
-                showNotification('❌ Failed to save structural details.', 'error');
-            });
+            .catch(() => showNotification('Database synchronization failed.', 'error'));
         }
 
-        // =========================
-        // DELETE RECORD
-        // =========================
         function deleteRecord(id) {
-            if (confirm('Are you absolutely sure you want to drop this database record entries item permanently?')) {
+            if (confirm('Drop database tracking log structure row permanently? This cannot be reversed.')) {
                 fetch(`/api/records/${id}`, { method: 'DELETE' })
-                    .then(res => {
-                        if (!res.ok) throw new Error('Deletion processing problem encountered.');
-                        return res.json();
-                    })
+                    .then(res => { if (!res.ok) throw new Error(); return res.json(); })
                     .then(() => {
-                        showNotification('🗑️ Record deleted successfully', 'success');
+                        showNotification('Log entity removed from main table cluster layout maps.', 'success');
                         loadRecords(currentPage);
                     })
-                    .catch(err => {
-                        console.error(err);
-                        showNotification('❌ Failed to complete record removal execution operations.', 'error');
-                    });
+                    .catch(() => showNotification('Could not safely wipe transactional node target details.', 'error'));
             }
         }
 
-        // =========================
-        // EXPORT EXECUTIONS
-        // =========================
         function exportCSV() {
             window.location.href = '/api/export/csv' + (currentQuery ? `?q=${encodeURIComponent(currentQuery)}&field=${currentField}` : '');
         }
@@ -1001,10 +989,7 @@
             window.location.href = '/api/export/json' + (currentQuery ? `?q=${encodeURIComponent(currentQuery)}&field=${currentField}` : '');
         }
 
-        // Initial Load on Script Mount Initialization
-        document.addEventListener('DOMContentLoaded', () => {
-            loadRecords(1);
-        });
+        document.addEventListener('DOMContentLoaded', () => loadRecords(1));
     </script>
 </body>
 </html>
