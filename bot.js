@@ -65,15 +65,27 @@ const bot = new TelegramBot(TOKEN, {
 });
 
 // =========================
-// EXTRACT DATA FUNCTION - ENHANCED FOR YOUR FORMAT
+// EXTRACT DATA FUNCTION - ENHANCED
 // =========================
 function extractData(text) {
     console.log('🔍 Processing text...');
     
-    // Clean up text - remove extra spaces and normalize
-    const cleanText = text.replace(/\s+/g, ' ').trim();
+    // If text is an array, join it
+    let cleanText = '';
+    if (Array.isArray(text)) {
+        cleanText = text.map(item => {
+            if (typeof item === 'string') return item;
+            if (typeof item === 'object' && item.text) return item.text;
+            return '';
+        }).join(' ');
+    } else {
+        cleanText = text;
+    }
     
-    // Extract WS Account - handle both Chinese and English
+    // Clean up text - remove extra spaces and normalize
+    cleanText = cleanText.replace(/\s+/g, ' ').trim();
+    
+    // Extract WS Account
     let wsAccount = null;
     const wsMatch = cleanText.match(/(?:Ws账号|WS账号|ws账号|WS帐号|ws帐号)[\s\u3000]*[：:；;][\s\u3000]*(\d+)/i);
     if (wsMatch) {
@@ -141,12 +153,11 @@ function extractData(text) {
         ipStatus = ipMatch[1].trim();
     }
     
-    // Extract Developer - Enhanced to handle multiple developers
+    // Extract Developer
     let developer = '';
     const devMatch = cleanText.match(/(?:开发|开发者)[\s\u3000]*[：:；;][\s\u3000]*([^\n]+)/i);
     if (devMatch) {
         developer = devMatch[1].trim();
-        // Clean up developer field
         developer = developer.replace(/\s*\/\/\/\/\/\s*/g, ' // ');
         developer = developer.replace(/\s*\/\s*/g, ' / ');
         developer = developer.replace(/\s{2,}/g, ' ');
@@ -218,7 +229,7 @@ function extractData(text) {
 }
 
 // =========================
-// PARSE TELEGRAM EXPORT - COMPLETE FIX FOR YOUR FORMAT
+// PARSE TELEGRAM EXPORT - SPECIFIC FOR YOUR JSON FORMAT
 // =========================
 function parseTelegramExport(jsonData) {
     try {
@@ -229,139 +240,98 @@ function parseTelegramExport(jsonData) {
         
         let records = [];
         console.log('📊 Parsing JSON data...');
-        console.log('Data type:', typeof data);
-        console.log('Is array:', Array.isArray(data));
         
-        // Handle different JSON structures
-        if (Array.isArray(data)) {
-            console.log('✅ Data is an array with', data.length, 'items');
-            records = data;
-        } else if (data.records && Array.isArray(data.records)) {
-            console.log('✅ Found records array with', data.records.length, 'items');
-            records = data.records;
-        } else if (data.data && Array.isArray(data.data)) {
-            console.log('✅ Found data array with', data.data.length, 'items');
-            records = data.data;
-        } else if (data.messages && Array.isArray(data.messages)) {
+        // Handle your specific Telegram export format
+        if (data.messages && Array.isArray(data.messages)) {
             console.log('✅ Found messages array with', data.messages.length, 'items');
-            records = data.messages
-                .filter(msg => msg.text && typeof msg.text === 'string')
-                .map(msg => extractData(msg.text))
+            
+            // Filter only message type (not service) and extract text
+            const messageRecords = data.messages
+                .filter(msg => msg.type === 'message' && msg.text)
+                .map(msg => {
+                    // Extract text from the message
+                    let text = '';
+                    if (Array.isArray(msg.text)) {
+                        text = msg.text.map(item => {
+                            if (typeof item === 'string') return item;
+                            if (typeof item === 'object' && item.text) return item.text;
+                            return '';
+                        }).join(' ');
+                    } else if (typeof msg.text === 'string') {
+                        text = msg.text;
+                    }
+                    
+                    // Extract data from the text
+                    const extracted = extractData(text);
+                    
+                    // Add sender info if available
+                    if (msg.from) {
+                        extracted.senderName = msg.from;
+                    }
+                    
+                    return extracted;
+                })
                 .filter(r => r && r.platformAccount);
-        } else if (data.result && Array.isArray(data.result)) {
-            console.log('✅ Found result array with', data.result.length, 'items');
-            records = data.result;
+            
+            records = messageRecords;
+            console.log(`✅ Extracted ${records.length} records from messages`);
         } else {
-            // Try to find any array in the object
-            console.log('🔍 Searching for arrays in object...');
-            let found = false;
-            for (const key in data) {
-                if (Array.isArray(data[key]) && data[key].length > 0) {
-                    console.log(`✅ Found array in key "${key}" with ${data[key].length} items`);
-                    // Check if it looks like records
-                    const first = data[key][0];
-                    if (first && typeof first === 'object') {
-                        // Check for Chinese field names
-                        if (first['平台账号'] || first['Ws账号'] || first.platformAccount || first.account) {
-                            records = data[key];
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-            }
+            // Fallback to generic parsing
+            console.log('🔍 Using generic parsing...');
             
-            // If still no records found, try to extract from object values
-            if (!found) {
-                console.log('🔍 Trying to extract from object...');
+            if (Array.isArray(data)) {
+                records = data;
+            } else if (data.records && Array.isArray(data.records)) {
+                records = data.records;
+            } else if (data.data && Array.isArray(data.data)) {
+                records = data.data;
+            } else if (data.result && Array.isArray(data.result)) {
+                records = data.result;
+            } else {
+                // Try to find any array in the object
                 for (const key in data) {
-                    if (typeof data[key] === 'object' && data[key] !== null && !Array.isArray(data[key])) {
-                        const obj = data[key];
-                        if (obj['平台账号'] || obj.platformAccount || obj.account || obj['Ws账号']) {
-                            records.push(obj);
-                        }
+                    if (Array.isArray(data[key]) && data[key].length > 0) {
+                        records = data[key];
+                        break;
                     }
-                }
-                console.log(`📊 Extracted ${records.length} records from object`);
-            }
-        }
-        
-        console.log(`📊 Total records found: ${records.length}`);
-        
-        // If we have records but they're in a different format, try to extract
-        if (records.length > 0 && typeof records[0] === 'object') {
-            // Check if the records are already in the right format
-            const sample = records[0];
-            if (sample['平台账号'] || sample['Ws账号']) {
-                console.log('✅ Records found with Chinese field names');
-            }
-        }
-        
-        // Normalize records - handle both English and Chinese field names
-        const normalizedRecords = records.map(r => {
-            // If it's a string, try to extract data
-            if (typeof r === 'string') {
-                return extractData(r);
-            }
-            
-            // If it's already a record object, extract the fields
-            if (typeof r === 'object' && r !== null) {
-                // Check for Chinese field names first
-                const platformAccount = r['平台账号'] || r.platformAccount || r.account || r.id || null;
-                const wsAccount = r['Ws账号'] || r['WS账号'] || r.wsAccount || r.ws || r.ws_id || null;
-                const todayDeposit = parseInt(r['今日首存'] || r.todayDeposit || r.today || 0);
-                const monthDeposit = parseInt(r['本月首存'] || r.monthDeposit || r.month || 0);
-                const joinDate = r['进粉日期'] || r['粉日期'] || r.joinDate || r.date || r.join_date || '';
-                const ipStatus = r['IP状态'] || r.ipStatus || r.ip || r.ip_status || '正常';
-                const developer = r['开发'] || r['开发者'] || r.developer || r.dev || r.developer_name || '';
-                const receptionist = r['推接待'] || r['接待'] || r.receptionist || r.reception || r.receptionist_name || '';
-                const remark = r['备注'] || r.remark || r.notes || '';
-                const channel = r['渠道'] || r['来源'] || r.channel || r.source || '';
-                
-                // If platformAccount is still null, try to find any 10-13 digit number
-                let finalPlatformAccount = platformAccount;
-                if (!finalPlatformAccount) {
-                    // Look for a number in the object
-                    for (const key in r) {
-                        if (typeof r[key] === 'string') {
-                            const match = r[key].match(/\b(\d{10,13})\b/);
-                            if (match) {
-                                finalPlatformAccount = match[1];
-                                break;
-                            }
-                        }
-                    }
-                }
-                
-                // If we have a platform account, return the normalized record
-                if (finalPlatformAccount) {
-                    return {
-                        platformAccount: finalPlatformAccount,
-                        wsAccount: wsAccount,
-                        todayDeposit: todayDeposit,
-                        monthDeposit: monthDeposit,
-                        joinDate: joinDate,
-                        ipStatus: ipStatus,
-                        developer: developer,
-                        receptionist: receptionist,
-                        remark: remark,
-                        channel: channel,
-                        rawText: JSON.stringify(r)
-                    };
                 }
             }
             
-            return null;
-        }).filter(r => r && r.platformAccount);
+            // Normalize records
+            records = records.map(r => {
+                if (typeof r === 'string') {
+                    return extractData(r);
+                }
+                if (typeof r === 'object' && r !== null) {
+                    const platformAccount = r['平台账号'] || r.platformAccount || r.account || r.id || null;
+                    if (platformAccount) {
+                        return {
+                            platformAccount: platformAccount,
+                            wsAccount: r['Ws账号'] || r.wsAccount || r.ws || null,
+                            todayDeposit: parseInt(r['今日首存'] || r.todayDeposit || 0),
+                            monthDeposit: parseInt(r['本月首存'] || r.monthDeposit || 0),
+                            joinDate: r['进粉日期'] || r['粉日期'] || r.joinDate || '',
+                            ipStatus: r['IP状态'] || r.ipStatus || '正常',
+                            developer: r['开发'] || r['开发者'] || r.developer || '',
+                            receptionist: r['推接待'] || r['接待'] || r.receptionist || '',
+                            remark: r['备注'] || r.remark || '',
+                            channel: r['渠道'] || r['来源'] || r.channel || '',
+                            rawText: JSON.stringify(r)
+                        };
+                    }
+                }
+                return null;
+            }).filter(r => r && r.platformAccount);
+        }
         
-        console.log(`✅ Normalized ${normalizedRecords.length} valid records`);
+        console.log(`✅ Total valid records: ${records.length}`);
         
         // Log first few records for debugging
-        if (normalizedRecords.length > 0) {
-            console.log('📋 First record sample:', JSON.stringify(normalizedRecords[0], null, 2));
+        if (records.length > 0) {
+            console.log('📋 First record sample:', JSON.stringify(records[0], null, 2));
         }
         
-        return normalizedRecords;
+        return records;
         
     } catch (err) {
         console.error('❌ Error parsing JSON:', err);
@@ -436,7 +406,6 @@ async function processMessage(msg) {
     if (!msg.text) return;
     if (msg.text.startsWith("/")) return;
     
-    // Check MongoDB connection
     if (mongoose.connection.readyState !== 1) {
         console.log("📥 Queuing message (MongoDB not ready)");
         messageQueue.push(msg);
@@ -700,7 +669,6 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
             ]);
             monthSum = monthResult[0]?.total || 0;
 
-            // Get source statistics
             stats = await Record.aggregate([
                 { $group: { 
                     _id: { $ifNull: ["$source", "telegram"] },
@@ -756,7 +724,7 @@ app.get('/', (req, res) => {
 // =========================
 const upload = multer({ 
     dest: 'uploads/',
-    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+    limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 app.post('/api/import/json', isAuthenticated, upload.single('jsonFile'), async (req, res) => {
@@ -764,24 +732,20 @@ app.post('/api/import/json', isAuthenticated, upload.single('jsonFile'), async (
         let jsonData;
         
         if (req.file) {
-            // Read from uploaded file
             const fileContent = fs.readFileSync(req.file.path, 'utf-8');
             jsonData = JSON.parse(fileContent);
-            fs.unlinkSync(req.file.path); // Clean up
+            fs.unlinkSync(req.file.path);
         } else if (req.body.jsonData) {
-            // Read from text input
             jsonData = JSON.parse(req.body.jsonData);
         } else {
             return res.status(400).json({ error: 'No JSON data provided' });
         }
 
-        // Parse the data
         const records = parseTelegramExport(jsonData);
         if (!records || records.length === 0) {
             return res.status(400).json({ error: 'No valid records found in JSON' });
         }
 
-        // Preview first 5 records
         const preview = records.slice(0, 5);
 
         res.json({
@@ -806,7 +770,6 @@ app.post('/api/import/confirm', isAuthenticated, async (req, res) => {
 
         const result = await bulkImportRecords(records, 'json_import');
         
-        // Update import stats
         importStats = {
             total: result.total,
             imported: result.imported,
@@ -834,7 +797,6 @@ async function bulkImportRecords(recordsData, source = 'telegram_import') {
         return { imported: 0, duplicates: 0, errors: 0, total: 0 };
     }
 
-    // Check MongoDB connection
     if (mongoose.connection.readyState !== 1) {
         console.log("❌ MongoDB not ready for bulk import");
         return { imported: 0, duplicates: 0, errors: recordsData.length, total: recordsData.length };
@@ -851,14 +813,12 @@ async function bulkImportRecords(recordsData, source = 'telegram_import') {
     const batchSize = 50;
     const batches = [];
 
-    // Prepare records for import
     for (const data of recordsData) {
         if (!data.platformAccount) {
             errors++;
             continue;
         }
 
-        // Check if already exists in DB
         const exists = await Record.findOne({ platformAccount: data.platformAccount });
         if (exists) {
             duplicates++;
@@ -876,7 +836,7 @@ async function bulkImportRecords(recordsData, source = 'telegram_import') {
             receptionist: data.receptionist || '',
             remark: data.remark || '',
             channel: data.channel || '',
-            senderName: 'System Import',
+            senderName: data.senderName || 'System Import',
             senderId: 0,
             rawMessage: data.rawText || JSON.stringify(data),
             collectionDate: collectionDate,
@@ -888,7 +848,6 @@ async function bulkImportRecords(recordsData, source = 'telegram_import') {
         batches.push(record);
     }
 
-    // Process in batches
     for (let i = 0; i < batches.length; i += batchSize) {
         const batch = batches.slice(i, i + batchSize);
         try {
@@ -901,9 +860,7 @@ async function bulkImportRecords(recordsData, source = 'telegram_import') {
             });
         } catch (err) {
             if (err.code === 11000) {
-                // Duplicate key errors
                 duplicates += err.writeErrors ? err.writeErrors.filter(e => e.code === 11000).length : 0;
-                // Some might still be inserted
                 if (err.result && err.result.insertedDocs) {
                     imported += err.result.insertedDocs.length;
                     err.result.insertedDocs.forEach(record => {
@@ -1346,31 +1303,16 @@ bot.onText(/\/import/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
     bot.sendMessage(msg.chat.id, 
         `📥 JSON Import Instructions\n\n` +
-        `Send me a JSON file or JSON data with the following format:\n\n` +
-        `{\n` +
-        `  "records": [\n` +
-        `    {\n` +
-        `      "platformAccount": "9241039856",\n` +
-        `      "wsAccount": "5219241039856",\n` +
-        `      "todayDeposit": 5,\n` +
-        `      "monthDeposit": 20,\n` +
-        `      "joinDate": "18/6",\n` +
-        `      "ipStatus": "正常",\n` +
-        `      "developer": "雪瑶",\n` +
-        `      "receptionist": "涵月"\n` +
-        `    }\n` +
-        `  ]\n` +
-        `}\n\n` +
-        `Or send a Telegram export JSON file.\n\n` +
+        `Send me a JSON file exported from Telegram.\n\n` +
+        `The bot will automatically extract all account records from the messages.\n\n` +
         `Type /confirm_import after sending the file to import.`
     );
 });
 
 // =========================
-// HANDLE DOCUMENT (JSON FILE) UPLOADS - FIXED
+// HANDLE DOCUMENT (JSON FILE) UPLOADS
 // =========================
 bot.on("document", async (msg) => {
-    // Check if user is authorized
     if (msg.from.id !== OWNER_ID) {
         return bot.sendMessage(msg.chat.id, "❌ You are not authorized to import data.");
     }
@@ -1379,12 +1321,10 @@ bot.on("document", async (msg) => {
     const fileName = msg.document.file_name || 'unknown.json';
     const fileSize = msg.document.file_size || 0;
     
-    // Only process JSON files
     if (!fileName.endsWith('.json') && !fileName.endsWith('.JSON')) {
         return bot.sendMessage(msg.chat.id, "❌ Please send a JSON file (.json)");
     }
 
-    // Check file size (max 10MB)
     if (fileSize > 10 * 1024 * 1024) {
         return bot.sendMessage(msg.chat.id, "❌ File too large. Maximum size is 10MB.");
     }
@@ -1392,11 +1332,9 @@ bot.on("document", async (msg) => {
     try {
         const processingMsg = await bot.sendMessage(msg.chat.id, "⏳ Processing JSON file... Please wait.");
         
-        // Get file from Telegram
         const file = await bot.getFile(fileId);
         const fileUrl = `https://api.telegram.org/file/bot${TOKEN}/${file.file_path}`;
         
-        // Download file using fetch
         const response = await fetch(fileUrl);
         if (!response.ok) {
             throw new Error(`Failed to download file: ${response.status}`);
@@ -1404,7 +1342,6 @@ bot.on("document", async (msg) => {
         
         const jsonText = await response.text();
         
-        // Parse JSON
         let jsonData;
         try {
             jsonData = JSON.parse(jsonText);
@@ -1413,17 +1350,14 @@ bot.on("document", async (msg) => {
             return bot.sendMessage(msg.chat.id, "❌ Invalid JSON format. Please check the file content.");
         }
 
-        // Parse the data
         const records = parseTelegramExport(jsonData);
         if (!records || records.length === 0) {
             await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
             return bot.sendMessage(msg.chat.id, "❌ No valid records found in the JSON file. Please check the format.");
         }
 
-        // Delete processing message
         await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
 
-        // Send summary without Markdown formatting to avoid parse errors
         let summary = `📄 File Analysis Complete\n\n`;
         summary += `📊 Found ${records.length} records in the file.\n\n`;
         summary += `📋 Preview (first 5 records):\n`;
@@ -1448,7 +1382,6 @@ bot.on("document", async (msg) => {
 
         await bot.sendMessage(msg.chat.id, summary);
         
-        // Store records in memory for confirmation (with timeout)
         global._pendingImport = {
             records: records,
             chatId: msg.chat.id,
@@ -1457,7 +1390,6 @@ bot.on("document", async (msg) => {
             fileSize: fileSize
         };
 
-        // Auto-cancel after 5 minutes
         setTimeout(() => {
             if (global._pendingImport && global._pendingImport.chatId === msg.chat.id) {
                 global._pendingImport = null;
@@ -1472,7 +1404,7 @@ bot.on("document", async (msg) => {
 });
 
 // =========================
-// CONFIRM IMPORT COMMAND - FIXED
+// CONFIRM IMPORT COMMAND
 // =========================
 bot.onText(/\/confirm_import/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
@@ -1481,7 +1413,6 @@ bot.onText(/\/confirm_import/, async (msg) => {
         return bot.sendMessage(msg.chat.id, "❌ No pending import found. Send a JSON file first.");
     }
 
-    // Check if import is too old (5 minutes)
     if (Date.now() - global._pendingImport.timestamp > 5 * 60 * 1000) {
         global._pendingImport = null;
         return bot.sendMessage(msg.chat.id, "⏰ Import session expired. Please send the file again.");
@@ -1494,7 +1425,6 @@ bot.onText(/\/confirm_import/, async (msg) => {
     const processingMsg = await bot.sendMessage(msg.chat.id, `⏳ Importing ${totalRecords} records from ${fileName}... Please wait.`);
 
     try {
-        // Check MongoDB connection
         if (mongoose.connection.readyState !== 1) {
             await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
             return bot.sendMessage(msg.chat.id, "❌ MongoDB is not connected. Please check the database.");
@@ -1509,7 +1439,6 @@ bot.onText(/\/confirm_import/, async (msg) => {
         let errors = 0;
         let failedRecords = [];
 
-        // Process in batches
         const batchSize = 50;
         for (let i = 0; i < records.length; i += batchSize) {
             const batch = records.slice(i, i + batchSize);
@@ -1520,7 +1449,6 @@ bot.onText(/\/confirm_import/, async (msg) => {
                 }
 
                 try {
-                    // Check if already exists
                     const exists = await Record.findOne({ platformAccount: data.platformAccount });
                     if (exists) {
                         duplicates++;
@@ -1538,7 +1466,7 @@ bot.onText(/\/confirm_import/, async (msg) => {
                         receptionist: data.receptionist || '',
                         remark: data.remark || '',
                         channel: data.channel || '',
-                        senderName: 'Telegram Import',
+                        senderName: data.senderName || 'Telegram Import',
                         senderId: msg.from.id,
                         rawMessage: data.rawText || JSON.stringify(data),
                         collectionDate: collectionDate,
@@ -1565,7 +1493,6 @@ bot.onText(/\/confirm_import/, async (msg) => {
             const results = await Promise.all(batchPromises);
             imported += results.filter(r => r !== null).length;
             
-            // Update progress (only every 20%)
             const progress = Math.round(((i + batch.length) / records.length) * 100);
             if (progress % 20 === 0 || i + batch.length >= records.length) {
                 try {
@@ -1575,13 +1502,11 @@ bot.onText(/\/confirm_import/, async (msg) => {
                         { chat_id: msg.chat.id, message_id: processingMsg.message_id }
                     );
                 } catch (editErr) {
-                    // Message might have been deleted or changed
                     console.log('Edit message error:', editErr.message);
                 }
             }
         }
 
-        // Update import stats
         importStats = {
             total: totalRecords,
             imported: imported,
@@ -1589,7 +1514,6 @@ bot.onText(/\/confirm_import/, async (msg) => {
             errors: errors
         };
 
-        // Save failed records to backup
         if (failedRecords.length > 0) {
             const backupFile = path.join(__dirname, 'failed_imports.json');
             let backups = [];
@@ -1607,11 +1531,9 @@ bot.onText(/\/confirm_import/, async (msg) => {
             fs.writeFileSync(backupFile, JSON.stringify(backups, null, 2));
         }
 
-        // Get updated totals
         const totalRecordsCount = await Record.countDocuments();
         const uniqueAccounts = accountSet.size;
 
-        // Send completion message (plain text, no Markdown)
         let statusMsg = `✅ IMPORT COMPLETE!\n\n`;
         statusMsg += `📊 Summary\n`;
         statusMsg += `├─ Total Records: ${totalRecords}\n`;
@@ -1631,7 +1553,6 @@ bot.onText(/\/confirm_import/, async (msg) => {
         await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
         await bot.sendMessage(msg.chat.id, statusMsg);
         
-        // Clear pending import
         global._pendingImport = null;
 
     } catch (err) {
@@ -1653,47 +1574,6 @@ bot.onText(/\/cancel/, async (msg) => {
     } else {
         bot.sendMessage(msg.chat.id, "ℹ️ No pending import to cancel");
     }
-});
-
-// =========================
-// HELP IMPORT COMMAND - FIXED
-// =========================
-bot.onText(/\/help_import/, async (msg) => {
-    if (msg.from.id !== OWNER_ID) return;
-    
-    const helpMsg = `📚 IMPORT HELP\n\n` +
-        `How to import data:\n` +
-        `1. Export your data as JSON from Telegram\n` +
-        `2. Send the JSON file to this bot\n` +
-        `3. Review the preview\n` +
-        `4. Type /confirm_import to import\n` +
-        `5. Type /cancel to cancel\n\n` +
-        `Supported JSON formats:\n` +
-        `• Telegram export JSON\n` +
-        `• Array of record objects\n` +
-        `• Object with "records" array\n` +
-        `• Object with "data" array\n` +
-        `• Object with "messages" array\n\n` +
-        `Record format:\n` +
-        `{\n` +
-        `  "platformAccount": "9241039856",\n` +
-        `  "wsAccount": "5219241039856",\n` +
-        `  "todayDeposit": 5,\n` +
-        `  "monthDeposit": 20,\n` +
-        `  "joinDate": "18/6",\n` +
-        `  "ipStatus": "正常",\n` +
-        `  "developer": "雪瑶",\n` +
-        `  "receptionist": "涵月"\n` +
-        `}\n\n` +
-        `Commands:\n` +
-        `/startcollect - Start collecting\n` +
-        `/stopcollect - Stop collecting\n` +
-        `/summary - View summary\n` +
-        `/status - View bot status\n` +
-        `/import - Import instructions\n` +
-        `/help_import - This help message`;
-    
-    bot.sendMessage(msg.chat.id, helpMsg);
 });
 
 // =========================
@@ -1735,7 +1615,6 @@ console.log("🤖 Bot starting...");
 startBot();
 console.log("🚀 Bot initialization complete");
 
-// Graceful shutdown
 process.on('SIGTERM', () => {
     console.log('🛑 Received SIGTERM, closing connections...');
     mongoose.connection.close();
