@@ -13,7 +13,7 @@ const crypto = require("crypto");
 // ENVIRONMENT VALIDATION
 // =========================
 const TOKEN = process.env.BOT_TOKEN;
-const OWNER_ID = parseInt(process.env.OWNER_ID) || 8033870108;
+const OWNER_ID = parseInt(process.env.OWNER_ID) || 7756391343;
 const MONGODB_URI = process.env.MONGODB_URI;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const ALLOWED_USERS = process.env.ALLOWED_USERS ? process.env.ALLOWED_USERS.split(',').map(id => parseInt(id.trim())) : [];
@@ -1208,9 +1208,8 @@ bot.onText(/\/test/, async (msg) => {
 bot.onText(/\/import/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
     bot.sendMessage(msg.chat.id, 
-        `📥 **JSON Import Instructions**\n\n` +
+        `📥 JSON Import Instructions\n\n` +
         `Send me a JSON file or JSON data with the following format:\n\n` +
-        `\`\`\`json\n` +
         `{\n` +
         `  "records": [\n` +
         `    {\n` +
@@ -1224,11 +1223,9 @@ bot.onText(/\/import/, async (msg) => {
         `      "receptionist": "涵月"\n` +
         `    }\n` +
         `  ]\n` +
-        `}\n` +
-        `\`\`\`\n\n` +
+        `}\n\n` +
         `Or send a Telegram export JSON file.\n\n` +
-        `Type /confirm_import after sending the file to import.`,
-        { parse_mode: 'Markdown' }
+        `Type /confirm_import after sending the file to import.`
     );
 });
 
@@ -1286,27 +1283,33 @@ bot.on("document", async (msg) => {
             return bot.sendMessage(msg.chat.id, "❌ No valid records found in the JSON file. Please check the format.");
         }
 
-        // Show preview
-        let previewMsg = `📄 **File Analysis Complete**\n\n`;
-        previewMsg += `📊 Found **${records.length}** records in the file.\n\n`;
-        previewMsg += `📋 **Preview (first 5 records):**\n\`\`\`\n`;
+        // Delete processing message
+        await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
+
+        // Send summary without Markdown formatting to avoid parse errors
+        let summary = `📄 File Analysis Complete\n\n`;
+        summary += `📊 Found ${records.length} records in the file.\n\n`;
+        summary += `📋 Preview (first 5 records):\n`;
+        summary += `─────────────────────\n`;
         
-        records.slice(0, 5).forEach((r, i) => {
-            previewMsg += `${i+1}. Account: ${r.platformAccount || 'N/A'}, `;
-            previewMsg += `WS: ${r.wsAccount || 'N/A'}, `;
-            previewMsg += `Today: ${r.todayDeposit || 0}, `;
-            previewMsg += `Month: ${r.monthDeposit || 0}\n`;
-        });
+        const maxPreview = Math.min(records.length, 5);
+        for (let i = 0; i < maxPreview; i++) {
+            const r = records[i];
+            summary += `${i+1}. Account: ${r.platformAccount || 'N/A'}, `;
+            summary += `WS: ${r.wsAccount || 'N/A'}, `;
+            summary += `Today: ${r.todayDeposit || 0}, `;
+            summary += `Month: ${r.monthDeposit || 0}\n`;
+        }
         
         if (records.length > 5) {
-            previewMsg += `... and ${records.length - 5} more records\n`;
+            summary += `... and ${records.length - 5} more records\n`;
         }
-        previewMsg += `\`\`\`\n\n`;
-        previewMsg += `⚠️ **Important:** This will check for duplicates and only import new records.\n\n`;
-        previewMsg += `Type **/confirm_import** to import all records, or **/cancel** to cancel.`;
+        
+        summary += `─────────────────────\n\n`;
+        summary += `⚠️ Important: This will check for duplicates and only import new records.\n\n`;
+        summary += `Type /confirm_import to import all records, or /cancel to cancel.`;
 
-        await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
-        await bot.sendMessage(msg.chat.id, previewMsg, { parse_mode: 'Markdown' });
+        await bot.sendMessage(msg.chat.id, summary);
         
         // Store records in memory for confirmation (with timeout)
         global._pendingImport = {
@@ -1332,7 +1335,7 @@ bot.on("document", async (msg) => {
 });
 
 // =========================
-// CONFIRM IMPORT COMMAND
+// CONFIRM IMPORT COMMAND - FIXED
 // =========================
 bot.onText(/\/confirm_import/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
@@ -1425,14 +1428,19 @@ bot.onText(/\/confirm_import/, async (msg) => {
             const results = await Promise.all(batchPromises);
             imported += results.filter(r => r !== null).length;
             
-            // Update progress
+            // Update progress (only every 20%)
             const progress = Math.round(((i + batch.length) / records.length) * 100);
             if (progress % 20 === 0 || i + batch.length >= records.length) {
-                await bot.editMessageText(
-                    `⏳ Importing ${totalRecords} records... ${progress}% complete\n` +
-                    `✅ Imported: ${imported} | ⚠️ Duplicates: ${duplicates} | ❌ Errors: ${errors}`,
-                    { chat_id: msg.chat.id, message_id: processingMsg.message_id }
-                );
+                try {
+                    await bot.editMessageText(
+                        `⏳ Importing ${totalRecords} records... ${progress}% complete\n` +
+                        `✅ Imported: ${imported} | ⚠️ Duplicates: ${duplicates} | ❌ Errors: ${errors}`,
+                        { chat_id: msg.chat.id, message_id: processingMsg.message_id }
+                    );
+                } catch (editErr) {
+                    // Message might have been deleted or changed
+                    console.log('Edit message error:', editErr.message);
+                }
             }
         }
 
@@ -1462,21 +1470,29 @@ bot.onText(/\/confirm_import/, async (msg) => {
             fs.writeFileSync(backupFile, JSON.stringify(backups, null, 2));
         }
 
-        // Send completion message
-        const statusMsg = `✅ **Import Complete!**\n\n` +
-            `📊 **Summary**\n` +
-            `├─ Total Records: ${totalRecords}\n` +
-            `├─ ✅ Imported: ${imported}\n` +
-            `├─ ⚠️ Duplicates: ${duplicates}\n` +
-            `└─ ❌ Errors: ${errors}\n\n` +
-            `${failedRecords.length > 0 ? `⚠️ ${failedRecords.length} records failed. Check failed_imports.json for details.\n\n` : ''}` +
-            `📈 **Updated Totals**\n` +
-            `├─ Total Records: ${await Record.countDocuments()}\n` +
-            `└─ Unique Accounts: ${accountSet.size}\n\n` +
-            `Type /summary to see detailed statistics.`;
+        // Get updated totals
+        const totalRecordsCount = await Record.countDocuments();
+        const uniqueAccounts = accountSet.size;
+
+        // Send completion message (plain text, no Markdown)
+        let statusMsg = `✅ IMPORT COMPLETE!\n\n`;
+        statusMsg += `📊 Summary\n`;
+        statusMsg += `├─ Total Records: ${totalRecords}\n`;
+        statusMsg += `├─ ✅ Imported: ${imported}\n`;
+        statusMsg += `├─ ⚠️ Duplicates: ${duplicates}\n`;
+        statusMsg += `└─ ❌ Errors: ${errors}\n\n`;
+        
+        if (failedRecords.length > 0) {
+            statusMsg += `⚠️ ${failedRecords.length} records failed. Check failed_imports.json for details.\n\n`;
+        }
+        
+        statusMsg += `📈 Updated Totals\n`;
+        statusMsg += `├─ Total Records: ${totalRecordsCount}\n`;
+        statusMsg += `└─ Unique Accounts: ${uniqueAccounts}\n\n`;
+        statusMsg += `Type /summary to see detailed statistics.`;
 
         await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
-        await bot.sendMessage(msg.chat.id, statusMsg, { parse_mode: 'Markdown' });
+        await bot.sendMessage(msg.chat.id, statusMsg);
         
         // Clear pending import
         global._pendingImport = null;
@@ -1503,25 +1519,25 @@ bot.onText(/\/cancel/, async (msg) => {
 });
 
 // =========================
-// HELP IMPORT COMMAND
+// HELP IMPORT COMMAND - FIXED
 // =========================
 bot.onText(/\/help_import/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
     
-    const helpMsg = `📚 **Import Help**\n\n` +
-        `**How to import data:**\n` +
+    const helpMsg = `📚 IMPORT HELP\n\n` +
+        `How to import data:\n` +
         `1. Export your data as JSON from Telegram\n` +
         `2. Send the JSON file to this bot\n` +
         `3. Review the preview\n` +
         `4. Type /confirm_import to import\n` +
         `5. Type /cancel to cancel\n\n` +
-        `**Supported JSON formats:**\n` +
+        `Supported JSON formats:\n` +
         `• Telegram export JSON\n` +
         `• Array of record objects\n` +
         `• Object with "records" array\n` +
         `• Object with "data" array\n` +
         `• Object with "messages" array\n\n` +
-        `**Record format:**\n` +
+        `Record format:\n` +
         `{\n` +
         `  "platformAccount": "9241039856",\n` +
         `  "wsAccount": "5219241039856",\n` +
@@ -1532,7 +1548,7 @@ bot.onText(/\/help_import/, async (msg) => {
         `  "developer": "雪瑶",\n` +
         `  "receptionist": "涵月"\n` +
         `}\n\n` +
-        `**Commands:**\n` +
+        `Commands:\n` +
         `/startcollect - Start collecting\n` +
         `/stopcollect - Stop collecting\n` +
         `/summary - View summary\n` +
@@ -1540,7 +1556,7 @@ bot.onText(/\/help_import/, async (msg) => {
         `/import - Import instructions\n` +
         `/help_import - This help message`;
     
-    bot.sendMessage(msg.chat.id, helpMsg, { parse_mode: 'Markdown' });
+    bot.sendMessage(msg.chat.id, helpMsg);
 });
 
 // =========================
