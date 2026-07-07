@@ -5,388 +5,536 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Telegram Bot Admin</title>
     <style>
+        :root {
+            --background: #090d16;
+            --surface: #121824;
+            --surface-accent: rgba(255, 255, 255, 0.03);
+            --border: rgba(255, 255, 255, 0.08);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            
+            --primary: #3b82f6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --info: #06b6d4;
+            --secondary: #64748b;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #f0f2f5;
-            color: #333;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--background);
+            color: var(--text-main);
+            padding: 30px 20px;
+            min-height: 100vh;
         }
 
-        /* Navigation */
+        .container {
+            max-width: 1440px;
+            margin: 0 auto;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Ambient Glow Backdrop */
+        .ambient-glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.05) 0%, rgba(0,0,0,0) 70%);
+            top: -10%;
+            left: 20%;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* Navigation Bar */
         .navbar {
-            background: white;
-            padding: 20px 30px;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            background: var(--surface);
+            padding: 18px 28px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
+            margin-bottom: 24px;
             flex-wrap: wrap;
-            gap: 15px;
+            gap: 16px;
         }
+
         .nav-left {
             display: flex;
             align-items: center;
             gap: 20px;
             flex-wrap: wrap;
         }
+
         .nav-left h2 {
-            font-size: 22px;
-            color: #333;
-            margin: 0;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            background: linear-gradient(to right, #fff, #9ca3af);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
+
         .status-badge {
-            padding: 5px 15px;
+            padding: 6px 14px;
             border-radius: 20px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
+
         .status-badge.active {
-            background: #d4edda;
-            color: #155724;
+            background: rgba(16, 185, 129, 0.12);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.2);
         }
+
         .status-badge.stopped {
-            background: #f8d7da;
-            color: #721c24;
+            background: rgba(239, 68, 68, 0.12);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.2);
         }
+
+        .back-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 6px 12px;
+            border-radius: 8px;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .back-link:hover {
+            color: #fff;
+            background: var(--surface-accent);
+            border-color: var(--border);
+        }
+
         .nav-right {
             display: flex;
             align-items: center;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-        .time-display {
-            color: #888;
-            font-size: 14px;
-            font-weight: 500;
-        }
-        .logout-btn {
-            padding: 8px 20px;
-            background: #dc3545;
-            color: white;
-            border-radius: 6px;
-            text-decoration: none;
-            font-size: 14px;
-            transition: all 0.3s;
-            font-weight: 600;
-        }
-        .logout-btn:hover {
-            background: #c82333;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(220,53,69,0.3);
-        }
-        .back-link {
-            color: #007bff;
-            text-decoration: none;
-            font-size: 14px;
-            padding: 5px 12px;
-            border-radius: 4px;
-            transition: all 0.3s;
-        }
-        .back-link:hover {
-            background: #f0f7ff;
-            text-decoration: underline;
+            gap: 20px;
         }
 
-        /* Stats Grid */
+        .time-display {
+            color: var(--text-muted);
+            font-size: 13px;
+            font-family: monospace;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+
+        .logout-btn {
+            padding: 8px 16px;
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: var(--danger);
+            color: white;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+        }
+
+        /* Metrics Cards Grid */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
             gap: 20px;
-            margin-bottom: 30px;
+            margin-bottom: 24px;
         }
+
         .stat-card {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            transition: all 0.3s;
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
             overflow: hidden;
         }
+
         .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+            transform: translateY(-4px);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 12px 20px -10px rgba(0, 0, 0, 0.5);
         }
+
         .stat-card::before {
             content: '';
             position: absolute;
             top: 0;
             left: 0;
-            right: 0;
-            height: 4px;
+            width: 4px;
+            height: 100%;
         }
-        .stat-card:nth-child(1)::before { background: linear-gradient(90deg, #667eea, #764ba2); }
-        .stat-card:nth-child(2)::before { background: linear-gradient(90deg, #f093fb, #f5576c); }
-        .stat-card:nth-child(3)::before { background: linear-gradient(90deg, #4facfe, #00f2fe); }
-        .stat-card:nth-child(4)::before { background: linear-gradient(90deg, #43e97b, #38f9d7); }
+
+        .stat-card:nth-child(1)::before { background: linear-gradient(to bottom, #3b82f6, #8b5cf6); }
+        .stat-card:nth-child(2)::before { background: linear-gradient(to bottom, #ec4899, #f43f5e); }
+        .stat-card:nth-child(3)::before { background: linear-gradient(to bottom, #06b6d4, #3b82f6); }
+        .stat-card:nth-child(4)::before { background: linear-gradient(to bottom, #10b981, #6366f1); }
         
         .stat-content h3 {
-            font-size: 14px;
-            color: #888;
-            margin-bottom: 10px;
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
             font-weight: 600;
         }
+
         .stat-number {
             font-size: 32px;
             font-weight: 700;
-            color: #333;
-            margin-bottom: 5px;
+            color: #fff;
+            margin-bottom: 6px;
+            letter-spacing: -0.03em;
         }
+
         .stat-change {
             font-size: 13px;
-            color: #999;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
-        .stat-change .positive { color: #28a745; }
-        .stat-change .negative { color: #dc3545; }
 
-        /* Control Panel */
-        .control-panel {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            margin-bottom: 30px;
+        .stat-change .badge-amount {
+            background: rgba(255, 255, 255, 0.06);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #fff;
+            font-weight: 500;
         }
+
+        /* Database Status Banner */
+        .status-banner {
+            background: var(--surface);
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            padding: 16px 24px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .db-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .queue-badge {
+            margin-left: 10px;
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .banner-timestamp {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        /* Operational Action Panel */
+        .control-panel {
+            background: var(--surface);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
         .panel-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
             flex-wrap: wrap;
+            gap: 10px;
         }
+
         .panel-header h3 {
-            font-size: 18px;
-            color: #333;
+            font-size: 16px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
         }
+
         .running-time {
-            font-size: 14px;
-            color: #28a745;
-            background: #d4edda;
-            padding: 4px 14px;
+            font-size: 13px;
+            color: #34d399;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            padding: 4px 12px;
             border-radius: 20px;
             font-weight: 600;
         }
+
         .panel-actions {
             display: flex;
-            gap: 12px;
+            gap: 10px;
             flex-wrap: wrap;
         }
+
+        /* Modernized Buttons */
         .btn {
-            padding: 10px 24px;
-            border: none;
-            border-radius: 8px;
+            padding: 10px 20px;
+            border: 1px solid transparent;
+            border-radius: 10px;
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s ease;
+            color: white;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
+
         .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        }
-        .btn-success {
-            background: #28a745;
-            color: white;
-        }
-        .btn-success:hover {
-            background: #218838;
-        }
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-        .btn-danger:hover {
-            background: #c82333;
-        }
-        .btn-primary {
-            background: #007bff;
-            color: white;
-        }
-        .btn-primary:hover {
-            background: #0056b3;
-        }
-        .btn-info {
-            background: #17a2b8;
-            color: white;
-        }
-        .btn-info:hover {
-            background: #138496;
-        }
-        .btn-warning {
-            background: #ffc107;
-            color: #333;
-        }
-        .btn-warning:hover {
-            background: #e0a800;
-        }
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-        .btn-secondary:hover {
-            background: #5a6268;
+            transform: translateY(-1px);
+            filter: brightness(1.1);
         }
 
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        .btn-success { background: var(--success); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2); }
+        .btn-danger { background: var(--danger); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); }
+        .btn-primary { background: var(--primary); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2); }
+        .btn-info { background: var(--info); box-shadow: 0 4px 12px rgba(6, 182, 212, 0.2); }
+        .btn-secondary { background: var(--secondary); box-shadow: 0 4px 12px rgba(100, 116, 139, 0.2); }
+        .btn-warning { background: var(--warning); color: #0f172a; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2); }
+
+        /* Real-time Toast Notifications */
         .notification {
-            margin-top: 15px;
+            margin-top: 16px;
             padding: 12px 20px;
-            border-radius: 8px;
-            display: none;
+            border-radius: 10px;
+            font-size: 14px;
             font-weight: 500;
-        }
-        .notification.success {
-            display: block;
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .notification.error {
-            display: block;
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .notification.info {
-            display: block;
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
+            display: none;
+            animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        /* Recent Records */
-        .recent-section {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            margin-bottom: 30px;
+        @keyframes slideIn {
+            from { transform: translateY(-10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
+
+        .notification.success { display: block; background: rgba(16, 185, 129, 0.1); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.2); }
+        .notification.error { display: block; background: rgba(239, 68, 68, 0.1); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2); }
+        .notification.info { display: block; background: rgba(6, 182, 212, 0.1); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.2); }
+
+        /* Data Visual Table Section */
+        .recent-section {
+            background: var(--surface);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
         .section-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
             flex-wrap: wrap;
+            gap: 10px;
         }
+
         .section-header h3 {
-            font-size: 18px;
-            color: #333;
+            font-size: 16px;
+            font-weight: 600;
         }
+
         .record-count {
-            font-size: 14px;
-            color: #888;
+            font-size: 13px;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4px 10px;
+            border-radius: 6px;
         }
+
         .table-container {
             overflow-x: auto;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: rgba(0, 0, 0, 0.1);
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 700px;
-        }
-        thead {
-            background: #f8f9fa;
-            border-radius: 8px;
-        }
-        th {
-            padding: 12px 15px;
+            min-width: 850px;
             text-align: left;
+        }
+
+        thead {
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            padding: 14px 18px;
             font-size: 12px;
-            font-weight: 700;
-            color: #555;
+            font-weight: 600;
+            color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            white-space: nowrap;
+            letter-spacing: 0.05em;
         }
+
         td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #f0f0f0;
-            font-size: 13px;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+            color: #e5e7eb;
         }
-        tr:hover {
-            background: #f8f9fa;
+
+        tr:last-child td {
+            border-bottom: none;
         }
-        .deposit-today {
-            color: #28a745;
-            font-weight: 600;
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
         }
-        .deposit-month {
-            color: #007bff;
-            font-weight: 600;
-        }
+
+        .deposit-today { color: #34d399; font-weight: 600; }
+        .deposit-month { color: #60a5fa; font-weight: 600; }
+
         .btn-delete {
-            background: none;
+            background: transparent;
             border: none;
-            font-size: 18px;
             cursor: pointer;
-            opacity: 0.6;
-            transition: all 0.3s;
-            padding: 5px 8px;
-            border-radius: 4px;
+            opacity: 0.5;
+            transition: all 0.2s;
+            padding: 6px;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            color: #f87171;
         }
+
         .btn-delete:hover {
             opacity: 1;
-            background: #fee;
-            transform: scale(1.1);
+            background: rgba(239, 68, 68, 0.15);
+            transform: scale(1.05);
         }
 
-        /* Footer */
+        /* Historical Import Breakdown Layout */
+        .import-summary-box {
+            background: var(--surface);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .import-summary-box h4 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .import-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 16px;
+        }
+
+        .import-metric {
+            background: rgba(0, 0, 0, 0.15);
+            padding: 14px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+
+        .import-metric span {
+            display: block;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .import-metric strong {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        /* Footer context */
         .footer {
             text-align: center;
-            padding: 20px;
-            color: #999;
-            font-size: 14px;
+            padding: 24px;
+            color: var(--text-muted);
+            font-size: 13px;
+            border-top: 1px solid var(--border);
+            margin-top: 40px;
         }
 
-        /* Responsive */
-        @media (max-width: 768px) {
-            .navbar {
-                flex-direction: column;
-                align-items: stretch;
-                padding: 15px;
-            }
-            .nav-left {
-                flex-wrap: wrap;
-            }
-            .stats-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-            .panel-actions {
-                flex-direction: column;
-            }
-            .panel-actions .btn {
-                width: 100%;
-                text-align: center;
-            }
-            .stat-number {
-                font-size: 24px;
-            }
+        /* Screen Break Responsive Optimization rules */
+        @media (max-width: 992px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
-        @media (max-width: 480px) {
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
+
+        @media (max-width: 768px) {
+            .navbar { flex-direction: column; align-items: stretch; padding: 20px; }
+            .nav-left { flex-direction: column; align-items: flex-start; }
+            .nav-right { justify-content: space-between; width: 100%; }
+            .stats-grid { grid-template-columns: 1fr; }
+            .panel-actions { flex-direction: column; }
+            .panel-actions .btn { width: 100%; justify-content: center; }
         }
     </style>
 </head>
 <body>
+    <div class="ambient-glow"></div>
+
     <div class="container">
-        <!-- Navigation -->
         <nav class="navbar">
             <div class="nav-left">
-                <h2>🤖 Bot Admin</h2>
-                <span class="status-badge <%= status %>">● <%= status === 'active' ? 'Collecting' : 'Stopped' %></span>
+                <h2>🤖 Bot Admin Panel</h2>
+                <span class="status-badge <%= status %>">
+                    <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:currentColor;"></span>
+                    <%= status === 'active' ? 'Collecting Active' : 'System Stopped' %>
+                </span>
                 <a href="/records" class="back-link">📋 All Records</a>
                 <a href="/import" class="back-link">📥 Import Data</a>
             </div>
@@ -396,81 +544,75 @@
             </div>
         </nav>
 
-        <!-- Stats Grid -->
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-content">
-                    <h3>📊 Total Records</h3>
+                    <h3>Total Metrics Captured</h3>
                     <p class="stat-number"><%= totalRecords.toLocaleString() %></p>
-                    <span class="stat-change">All time</span>
+                    <div class="stat-change">Historical Accumulation</div>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-content">
-                    <h3>👤 Unique Accounts</h3>
+                    <h3>Unique Profile Handlers</h3>
                     <p class="stat-number"><%= uniqueAccounts.toLocaleString() %></p>
-                    <span class="stat-change">Unique platform users</span>
+                    <div class="stat-change">Distinct User IDs</div>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-content">
-                    <h3>📅 Today's Records</h3>
+                    <h3>Today's Trapped Payload</h3>
                     <p class="stat-number"><%= todayRecords.toLocaleString() %></p>
-                    <span class="stat-change">💰 $<%= todayDeposit.toLocaleString() %> deposit</span>
+                    <div class="stat-change">Value: <span class="badge-amount">$<%= todayDeposit.toLocaleString() %></span></div>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-content">
-                    <h3>📆 This Month</h3>
+                    <h3>Current Month Scope</h3>
                     <p class="stat-number"><%= monthRecords.toLocaleString() %></p>
-                    <span class="stat-change">💰 $<%= monthDeposit.toLocaleString() %> deposit</span>
+                    <div class="stat-change">Value: <span class="badge-amount">$<%= monthDeposit.toLocaleString() %></span></div>
                 </div>
             </div>
         </div>
 
-        <!-- MongoDB Status -->
-        <div style="background: white; border-radius: 12px; padding: 15px 25px; margin-bottom: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-            <div>
-                <strong>📀 MongoDB:</strong>
-                <span style="color: <%= mongoConnected ? '#28a745' : '#dc3545' %>;">
-                    <%= mongoConnected ? '✅ Connected' : '❌ Disconnected' %>
+        <div class="status-banner">
+            <div class="db-info">
+                <strong>📀 Cluster State:</strong>
+                <span style="color: <%= mongoConnected ? '#10b981' : '#ef4444' %>; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                    <%= mongoConnected ? '● Connected' : '● Offline' %>
                 </span>
                 <% if (queuedMessages > 0) { %>
-                    <span style="margin-left: 15px; background: #ffc107; padding: 2px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
-                        📥 <%= queuedMessages %> queued
-                    </span>
+                    <span class="queue-badge">📥 <%= queuedMessages %> Documents Stacked</span>
                 <% } %>
             </div>
-            <div style="font-size: 13px; color: #888;">
-                <%= collectionStartTime ? 'Started: ' + new Date(collectionStartTime).toLocaleString() : 'Not collecting' %>
+            <div class="banner-timestamp">
+                <%= collectionStartTime ? 'Engine Active Since: ' + new Date(collectionStartTime).toLocaleString() : 'Engine Inactive' %>
             </div>
         </div>
 
-        <!-- Control Panel -->
         <div class="control-panel">
             <div class="panel-header">
-                <h3>🎮 Control Panel</h3>
+                <h3>🎮 Core Engine Controls</h3>
                 <% if (collectionStartTime) { %>
-                    <span class="running-time">⏱️ Running: <span id="runTime">0</span> min</span>
+                    <span class="running-time">⏱️ Uptime: <span id="runTime">0</span> min</span>
                 <% } %>
             </div>
             <div class="panel-actions">
                 <button id="toggleBtn" class="btn <%= status === 'active' ? 'btn-danger' : 'btn-success' %>">
-                    <%= status === 'active' ? '⏹️ Stop Collection' : '▶️ Start Collection' %>
+                    <%= status === 'active' ? '⏹️ Terminate Engine' : '▶️ Initialize Engine' %>
                 </button>
-                <button id="refreshBtn" class="btn btn-primary">🔄 Refresh</button>
-                <button id="exportBtn" class="btn btn-info">📥 Export CSV</button>
-                <button id="exportJsonBtn" class="btn btn-secondary">📄 Export JSON</button>
-                <button id="clearBtn" class="btn btn-warning">🗑️ Clear Data</button>
+                <button id="refreshBtn" class="btn btn-primary">🔄 Sync State</button>
+                <button id="exportBtn" class="btn btn-info">📥 Extract CSV</button>
+                <button id="exportJsonBtn" class="btn btn-secondary">📄 Extract JSON</button>
+                <button id="clearBtn" class="btn btn-warning">🗑️ Purge Records</button>
             </div>
-            <div id="notification" class="notification" style="display:none;"></div>
+            <div id="notification" class="notification"></div>
         </div>
 
-        <!-- Recent Records -->
         <div class="recent-section">
             <div class="section-header">
-                <h3>📋 Recent Records</h3>
-                <span class="record-count"><%= recentRecords.length %> records shown</span>
+                <h3>📋 Recent Operational Entries</h3>
+                <span class="record-count"><%= recentRecords.length %> Buffer Nodes Rendered</span>
             </div>
             <div class="table-container">
                 <table>
@@ -484,32 +626,36 @@
                             <th>本月首存</th>
                             <th>进粉日期</th>
                             <th>Sender</th>
-                            <th>Action</th>
+                            <th style="text-align: center;">Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         <% if (recentRecords.length > 0) { %>
                             <% recentRecords.forEach((record, index) => { %>
                             <tr>
-                                <td><%= index + 1 %></td>
+                                <td style="color: var(--text-muted); font-size: 12px; font-family: monospace;"><%= index + 1 %></td>
                                 <td><strong><%= record.wsAccount || '-' %></strong></td>
-                                <td><strong style="color:#007bff;"><%= record.platformAccount %></strong></td>
+                                <td><strong style="color: #60a5fa;"><%= record.platformAccount %></strong></td>
                                 <td><%= record.receptionist || '-' %></td>
                                 <td class="deposit-today">$<%= record.todayDeposit %></td>
                                 <td class="deposit-month">$<%= record.monthDeposit %></td>
-                                <td><%= record.joinDate || '-' %></td>
+                                <td style="color: var(--text-muted); font-size: 13px;"><%= record.joinDate || '-' %></td>
                                 <td><%= record.senderName || '-' %></td>
-                                <td>
-                                    <button class="btn-delete" data-id="<%= record._id %>" title="Delete">🗑️</button>
+                                <td style="text-align: center;">
+                                    <button class="btn-delete" data-id="<%= record._id %>" title="Drop Node Record">
+                                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-16v4M4 7h16" />
+                                        </svg>
+                                    </button>
                                 </td>
                             </tr>
                             <% }); %>
                         <% } else { %>
                             <tr>
-                                <td colspan="9" style="text-align:center; padding: 40px; color: #999;">
-                                    <div style="font-size: 48px; margin-bottom: 10px;">📭</div>
-                                    <p>No records found. Start collecting data!</p>
-                                    <p style="font-size:12px; margin-top:5px;">Send messages to the bot or import data via JSON</p>
+                                <td colspan="9" style="text-align:center; padding: 60px;">
+                                    <div style="font-size: 40px; margin-bottom: 12px; filter: grayscale(1);">📭</div>
+                                    <p style="color: #fff; font-weight: 500;">No Active Storage Vectors Detected</p>
+                                    <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">Awaiting pipeline data packets or static file insertions</p>
                                 </td>
                             </tr>
                         <% } %>
@@ -518,24 +664,22 @@
             </div>
         </div>
 
-        <!-- Import Stats -->
         <% if (importStats && importStats.total > 0) { %>
-        <div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); margin-bottom: 30px;">
-            <h4 style="margin-bottom: 10px;">📥 Last Import Summary</h4>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;">
-                <div><strong>Total:</strong> <%= importStats.total %></div>
-                <div><strong style="color:#28a745;">Imported:</strong> <%= importStats.imported %></div>
-                <div><strong style="color:#ffc107;">Duplicates:</strong> <%= importStats.duplicates %></div>
-                <div><strong style="color:#dc3545;">Errors:</strong> <%= importStats.errors %></div>
+        <div class="import-summary-box">
+            <h4>📥 Last IO Packet Parsing Metric</h4>
+            <div class="import-grid">
+                <div class="import-metric"><span>Aggregated Total</span><strong><%= importStats.total %></strong></div>
+                <div class="import-metric"><span style="color:#34d399;">Success Writes</span><strong style="color:#34d399;"><%= importStats.imported %></strong></div>
+                <div class="import-metric"><span style="color:#fbbf24;">Duplicates Dropped</span><strong style="color:#fbbf24;"><%= importStats.duplicates %></strong></div>
+                <div class="import-metric"><span style="color:#f87171;">Structural Failures</span><strong style="color:#f87171;"><%= importStats.errors %></strong></div>
             </div>
         </div>
         <% } %>
 
-        <!-- Footer -->
         <footer class="footer">
-            <p>Telegram Bot Admin Panel v2.0 | Data stored in MongoDB | 
-            <span style="color: <%= mongoConnected ? '#28a745' : '#dc3545' %>;">
-                <%= mongoConnected ? '🟢 Online' : '🔴 Offline' %>
+            <p>Admin Kernel Engine Architecture v2.5 | Non-volatile Datastore Cluster Layer: MongoDB | 
+            <span style="color: <%= mongoConnected ? '#10b981' : '#ef4444' %>; font-weight: 600;">
+                <%= mongoConnected ? '🟢 Nodes Synchronized' : '🔴 Connection Broken' %>
             </span></p>
         </footer>
     </div>
@@ -544,26 +688,18 @@
         let collectionStartTime = <%= collectionStartTime ? new Date(collectionStartTime).getTime() : 'null' %>;
         let isCollecting = <%= status === 'active' %>;
 
-        // =========================
-        // UPDATE TIME
-        // =========================
+        // Clock Synchronizer
         function updateTime() {
             const now = new Date();
             document.getElementById('currentTime').textContent = now.toLocaleString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
+                month: 'short', day: 'numeric', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
             });
         }
         setInterval(updateTime, 1000);
         updateTime();
 
-        // =========================
-        // UPDATE RUNNING TIME
-        // =========================
+        // Execution Timer Calculator
         function updateRunningTime() {
             if (collectionStartTime && isCollecting) {
                 const diff = Math.floor((Date.now() - collectionStartTime) / 1000 / 60);
@@ -573,134 +709,87 @@
         }
         setInterval(updateRunningTime, 60000);
 
-        // =========================
-        // SHOW NOTIFICATION
-        // =========================
+        // Toast Feedback Delivery
         function showNotification(message, type = 'info') {
             const el = document.getElementById('notification');
             el.textContent = message;
             el.className = `notification ${type}`;
-            el.style.display = 'block';
-            setTimeout(() => {
-                el.style.display = 'none';
-            }, 5000);
+            setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.style.display = 'none', 300); }, 5000);
         }
 
-        // =========================
-        // TOGGLE COLLECTION
-        // =========================
+        // Processing Toggles
         document.getElementById('toggleBtn').addEventListener('click', function() {
             fetch('/api/toggle', { method: 'POST' })
                 .then(res => res.json())
                 .then(data => {
                     if (data.status === 'active') {
-                        this.textContent = '⏹️ Stop Collection';
-                        this.className = 'btn btn-danger';
-                        isCollecting = true;
-                        collectionStartTime = Date.now();
-                        document.querySelector('.status-badge').className = 'status-badge active';
-                        document.querySelector('.status-badge').textContent = '● Collecting';
-                        showNotification('✅ Collection started!', 'success');
+                        showNotification('✅ Collection Pipeline Armed Successfully', 'success');
                     } else {
-                        this.textContent = '▶️ Start Collection';
-                        this.className = 'btn btn-success';
-                        isCollecting = false;
-                        collectionStartTime = null;
-                        document.querySelector('.status-badge').className = 'status-badge stopped';
-                        document.querySelector('.status-badge').textContent = '● Stopped';
-                        showNotification('⏹️ Collection stopped', 'info');
+                        showNotification('⏹️ Collection Engine Interrupted and Suspended', 'info');
                     }
-                    location.reload();
+                    setTimeout(() => location.reload(), 800);
                 })
-                .catch(err => {
-                    showNotification('❌ Error toggling collection: ' + err.message, 'error');
-                });
+                .catch(err => showNotification('❌ Terminal Error Altering Core State: ' + err.message, 'error'));
         });
 
-        // =========================
-        // REFRESH
-        // =========================
         document.getElementById('refreshBtn').addEventListener('click', function() {
-            this.textContent = '⏳ Loading...';
-            this.disabled = true;
+            this.textContent = '⏳ Querying Matrix...';
+            this.style.pointerEvents = 'none';
             location.reload();
         });
 
-        // =========================
-        // EXPORT CSV
-        // =========================
         document.getElementById('exportBtn').addEventListener('click', function() {
             window.location.href = '/api/export';
-            showNotification('📥 Downloading CSV...', 'info');
+            showNotification('📥 Generating Structured CSV Transposition File...', 'info');
         });
 
-        // =========================
-        // EXPORT JSON
-        // =========================
         document.getElementById('exportJsonBtn').addEventListener('click', function() {
             window.location.href = '/api/export/json';
-            showNotification('📄 Downloading JSON...', 'info');
+            showNotification('📄 Streaming Parsed Object Tree Array payload...', 'info');
         });
 
-        // =========================
-        // CLEAR DATA
-        // =========================
         document.getElementById('clearBtn').addEventListener('click', function() {
-            if (confirm('⚠️ Are you sure you want to delete ALL records? This action cannot be undone!')) {
-                if (confirm('⚠️⚠️ REALLY delete all data?')) {
+            if (confirm('⚠️ Wipe collections clean? This wipes cold-storage indexes!')) {
+                if (confirm('⚠️⚠️ Final confirmation override required. Clear database instance?')) {
                     fetch('/api/clear', { method: 'POST' })
                         .then(res => res.json())
                         .then(data => {
                             if (data.success) {
-                                showNotification('✅ All data cleared successfully!', 'success');
-                                setTimeout(() => location.reload(), 1500);
+                                showNotification('✅ Datastore Purged Successfully', 'success');
+                                setTimeout(() => location.reload(), 1200);
                             } else {
-                                showNotification('❌ Error clearing data: ' + data.error, 'error');
+                                showNotification('❌ Clear Command Refused: ' + data.error, 'error');
                             }
                         })
-                        .catch(err => {
-                            showNotification('❌ Error: ' + err.message, 'error');
-                        });
+                        .catch(err => showNotification('❌ Request Failure: ' + err.message, 'error'));
                 }
             }
         });
 
-        // =========================
-        // DELETE RECORD
-        // =========================
         document.querySelectorAll('.btn-delete').forEach(btn => {
             btn.addEventListener('click', function() {
                 const id = this.dataset.id;
-                if (confirm('Delete this record?')) {
+                if (confirm('Drop Document Vector Row?')) {
                     fetch(`/api/record/${id}`, { method: 'DELETE' })
                         .then(res => res.json())
                         .then(data => {
                             if (data.success) {
-                                showNotification('✅ Record deleted', 'success');
-                                this.closest('tr').remove();
+                                showNotification('✅ Vector Deleted From Index', 'success');
+                                this.closest('tr').style.opacity = '0';
+                                setTimeout(() => this.closest('tr').remove(), 300);
                             } else {
-                                showNotification('❌ Error: ' + data.error, 'error');
+                                showNotification('❌ Dropping Node Failed: ' + data.error, 'error');
                             }
                         })
-                        .catch(err => {
-                            showNotification('❌ Error: ' + err.message, 'error');
-                        });
+                        .catch(err => showNotification('❌ Context Error: ' + err.message, 'error'));
                 }
             });
         });
 
-        // =========================
-        // KEYBOARD SHORTCUTS
-        // =========================
+        // Event Accelerator Macros
         document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey && e.key === 'r') {
-                e.preventDefault();
-                location.reload();
-            }
-            if (e.ctrlKey && e.key === 's') {
-                e.preventDefault();
-                document.getElementById('toggleBtn').click();
-            }
+            if (e.ctrlKey && e.key === 'r') { e.preventDefault(); location.reload(); }
+            if (e.ctrlKey && e.key === 's') { e.preventDefault(); document.getElementById('toggleBtn').click(); }
         });
     </script>
 </body>
