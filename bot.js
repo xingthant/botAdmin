@@ -164,7 +164,7 @@ function extractData(text) {
 }
 
 // =========================
-// PARSE JSON DATA FROM TELEGRAM
+// PARSE TELEGRAM EXPORT - ENHANCED
 // =========================
 function parseTelegramExport(jsonData) {
     try {
@@ -173,9 +173,9 @@ function parseTelegramExport(jsonData) {
             data = JSON.parse(jsonData);
         }
         
-        // Handle different JSON structures
         let records = [];
         
+        // Handle different JSON structures
         if (Array.isArray(data)) {
             records = data;
         } else if (data.records && Array.isArray(data.records)) {
@@ -184,123 +184,52 @@ function parseTelegramExport(jsonData) {
             records = data.data;
         } else if (data.messages && Array.isArray(data.messages)) {
             // Telegram export format
-            records = data.messages.map(msg => {
-                if (msg.text) {
-                    return extractData(msg.text);
-                }
-                return null;
-            }).filter(r => r && r.platformAccount);
+            records = data.messages
+                .filter(msg => msg.text && typeof msg.text === 'string')
+                .map(msg => extractData(msg.text))
+                .filter(r => r && r.platformAccount);
+        } else if (data.result && Array.isArray(data.result)) {
+            records = data.result;
         } else {
-            // Try to extract from object values
+            // Try to find any array in the object
             for (const key in data) {
-                if (Array.isArray(data[key])) {
-                    records = data[key];
-                    break;
+                if (Array.isArray(data[key]) && data[key].length > 0) {
+                    // Check if it looks like records
+                    const first = data[key][0];
+                    if (first && (first.platformAccount || first.account || first.id)) {
+                        records = data[key];
+                        break;
+                    }
                 }
             }
         }
         
-        return records;
+        // Normalize records
+        return records.map(r => {
+            // If it's a string, try to extract data
+            if (typeof r === 'string') {
+                return extractData(r);
+            }
+            // If it's an object, normalize fields
+            return {
+                platformAccount: r.platformAccount || r.account || r.id || null,
+                wsAccount: r.wsAccount || r.ws || r.ws_id || null,
+                todayDeposit: parseInt(r.todayDeposit || r.today || 0),
+                monthDeposit: parseInt(r.monthDeposit || r.month || 0),
+                joinDate: r.joinDate || r.date || r.join_date || '',
+                ipStatus: r.ipStatus || r.ip || r.ip_status || '正常',
+                developer: r.developer || r.dev || r.developer_name || '',
+                receptionist: r.receptionist || r.reception || r.receptionist_name || '',
+                remark: r.remark || r.notes || '',
+                channel: r.channel || r.source || '',
+                rawText: JSON.stringify(r)
+            };
+        }).filter(r => r.platformAccount);
+        
     } catch (err) {
         console.error('Error parsing JSON:', err);
         return null;
     }
-}
-
-// =========================
-// BULK IMPORT FUNCTION
-// =========================
-async function bulkImportRecords(recordsData, source = 'telegram_import') {
-    if (!Array.isArray(recordsData) || recordsData.length === 0) {
-        return { imported: 0, duplicates: 0, errors: 0, total: 0 };
-    }
-
-    // Check MongoDB connection
-    if (mongoose.connection.readyState !== 1) {
-        console.log("❌ MongoDB not ready for bulk import");
-        return { imported: 0, duplicates: 0, errors: recordsData.length, total: recordsData.length };
-    }
-
-    let imported = 0;
-    let duplicates = 0;
-    let errors = 0;
-
-    const now = new Date();
-    const collectionDate = now.toISOString().split('T')[0];
-    const collectionMonth = collectionDate.substring(0, 7);
-
-    const batchSize = 50;
-    const batches = [];
-
-    // Prepare records for import
-    for (const data of recordsData) {
-        if (!data.platformAccount) {
-            errors++;
-            continue;
-        }
-
-        // Check if already exists in DB
-        const exists = await Record.findOne({ platformAccount: data.platformAccount });
-        if (exists) {
-            duplicates++;
-            continue;
-        }
-
-        const record = new Record({
-            wsAccount: data.wsAccount || '',
-            platformAccount: data.platformAccount,
-            todayDeposit: parseInt(data.todayDeposit) || 0,
-            monthDeposit: parseInt(data.monthDeposit) || 0,
-            joinDate: data.joinDate || '',
-            ipStatus: data.ipStatus || '正常',
-            developer: data.developer || '',
-            receptionist: data.receptionist || '',
-            remark: data.remark || '',
-            channel: data.channel || '',
-            senderName: 'System Import',
-            senderId: 0,
-            rawMessage: data.rawText || JSON.stringify(data),
-            collectionDate: collectionDate,
-            collectionMonth: collectionMonth,
-            source: source,
-            importedAt: now
-        });
-
-        batches.push(record);
-    }
-
-    // Process in batches
-    for (let i = 0; i < batches.length; i += batchSize) {
-        const batch = batches.slice(i, i + batchSize);
-        try {
-            const result = await Record.insertMany(batch, { ordered: false });
-            imported += result.length;
-            result.forEach(record => {
-                if (record.platformAccount) {
-                    accountSet.add(record.platformAccount);
-                }
-            });
-        } catch (err) {
-            if (err.code === 11000) {
-                // Duplicate key errors
-                duplicates += err.writeErrors ? err.writeErrors.filter(e => e.code === 11000).length : 0;
-                // Some might still be inserted
-                if (err.result && err.result.insertedDocs) {
-                    imported += err.result.insertedDocs.length;
-                    err.result.insertedDocs.forEach(record => {
-                        if (record.platformAccount) {
-                            accountSet.add(record.platformAccount);
-                        }
-                    });
-                }
-            } else {
-                console.error('Batch import error:', err);
-                errors += batch.length;
-            }
-        }
-    }
-
-    return { imported, duplicates, errors, total: recordsData.length };
 }
 
 // =========================
@@ -554,14 +483,6 @@ function isAuthenticated(req, res, next) {
     }
 }
 
-function isOwner(req, res, next) {
-    if (req.session && req.session.isAdmin) {
-        next();
-    } else {
-        res.redirect('/login');
-    }
-}
-
 // =========================
 // HEALTH CHECK
 // =========================
@@ -769,6 +690,102 @@ app.post('/api/import/confirm', isAuthenticated, async (req, res) => {
 });
 
 // =========================
+// BULK IMPORT FUNCTION
+// =========================
+async function bulkImportRecords(recordsData, source = 'telegram_import') {
+    if (!Array.isArray(recordsData) || recordsData.length === 0) {
+        return { imported: 0, duplicates: 0, errors: 0, total: 0 };
+    }
+
+    // Check MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+        console.log("❌ MongoDB not ready for bulk import");
+        return { imported: 0, duplicates: 0, errors: recordsData.length, total: recordsData.length };
+    }
+
+    let imported = 0;
+    let duplicates = 0;
+    let errors = 0;
+
+    const now = new Date();
+    const collectionDate = now.toISOString().split('T')[0];
+    const collectionMonth = collectionDate.substring(0, 7);
+
+    const batchSize = 50;
+    const batches = [];
+
+    // Prepare records for import
+    for (const data of recordsData) {
+        if (!data.platformAccount) {
+            errors++;
+            continue;
+        }
+
+        // Check if already exists in DB
+        const exists = await Record.findOne({ platformAccount: data.platformAccount });
+        if (exists) {
+            duplicates++;
+            continue;
+        }
+
+        const record = new Record({
+            wsAccount: data.wsAccount || '',
+            platformAccount: data.platformAccount,
+            todayDeposit: parseInt(data.todayDeposit) || 0,
+            monthDeposit: parseInt(data.monthDeposit) || 0,
+            joinDate: data.joinDate || '',
+            ipStatus: data.ipStatus || '正常',
+            developer: data.developer || '',
+            receptionist: data.receptionist || '',
+            remark: data.remark || '',
+            channel: data.channel || '',
+            senderName: 'System Import',
+            senderId: 0,
+            rawMessage: data.rawText || JSON.stringify(data),
+            collectionDate: collectionDate,
+            collectionMonth: collectionMonth,
+            source: source,
+            importedAt: now
+        });
+
+        batches.push(record);
+    }
+
+    // Process in batches
+    for (let i = 0; i < batches.length; i += batchSize) {
+        const batch = batches.slice(i, i + batchSize);
+        try {
+            const result = await Record.insertMany(batch, { ordered: false });
+            imported += result.length;
+            result.forEach(record => {
+                if (record.platformAccount) {
+                    accountSet.add(record.platformAccount);
+                }
+            });
+        } catch (err) {
+            if (err.code === 11000) {
+                // Duplicate key errors
+                duplicates += err.writeErrors ? err.writeErrors.filter(e => e.code === 11000).length : 0;
+                // Some might still be inserted
+                if (err.result && err.result.insertedDocs) {
+                    imported += err.result.insertedDocs.length;
+                    err.result.insertedDocs.forEach(record => {
+                        if (record.platformAccount) {
+                            accountSet.add(record.platformAccount);
+                        }
+                    });
+                }
+            } else {
+                console.error('Batch import error:', err);
+                errors += batch.length;
+            }
+        }
+    }
+
+    return { imported, duplicates, errors, total: recordsData.length };
+}
+
+// =========================
 // API ROUTES
 // =========================
 app.get('/api/stats', isAuthenticated, async (req, res) => {
@@ -818,13 +835,18 @@ app.get('/api/records', isAuthenticated, async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 50;
         const skip = (page - 1) * limit;
+        const sortField = req.query.sort || 'collectedAt';
+        const sortOrder = req.query.order === 'asc' ? 1 : -1;
 
         if (mongoose.connection.readyState !== 1) {
             return res.json({ records: [], total: 0, page: 1, totalPages: 0 });
         }
 
+        const sortObj = {};
+        sortObj[sortField] = sortOrder;
+
         const records = await Record.find()
-            .sort({ collectedAt: -1 })
+            .sort(sortObj)
             .skip(skip)
             .limit(limit);
 
@@ -844,23 +866,32 @@ app.get('/api/records', isAuthenticated, async (req, res) => {
 app.get('/api/search', isAuthenticated, async (req, res) => {
     try {
         const query = req.query.q;
+        const field = req.query.field || 'all';
+        
         if (!query || mongoose.connection.readyState !== 1) {
             return res.json({ records: [] });
         }
 
-        const records = await Record.find({
-            $or: [
-                { platformAccount: { $regex: query, $options: 'i' } },
-                { wsAccount: { $regex: query, $options: 'i' } },
-                { senderName: { $regex: query, $options: 'i' } },
-                { receptionist: { $regex: query, $options: 'i' } },
-                { developer: { $regex: query, $options: 'i' } },
-                { rawMessage: { $regex: query, $options: 'i' } },
-                { remark: { $regex: query, $options: 'i' } },
-                { channel: { $regex: query, $options: 'i' } }
-            ]
-        }).limit(100);
+        let searchQuery = {};
+        
+        if (field === 'all') {
+            searchQuery = {
+                $or: [
+                    { platformAccount: { $regex: query, $options: 'i' } },
+                    { wsAccount: { $regex: query, $options: 'i' } },
+                    { senderName: { $regex: query, $options: 'i' } },
+                    { receptionist: { $regex: query, $options: 'i' } },
+                    { developer: { $regex: query, $options: 'i' } },
+                    { rawMessage: { $regex: query, $options: 'i' } },
+                    { remark: { $regex: query, $options: 'i' } },
+                    { channel: { $regex: query, $options: 'i' } }
+                ]
+            };
+        } else {
+            searchQuery = { [field]: { $regex: query, $options: 'i' } };
+        }
 
+        const records = await Record.find(searchQuery).limit(100);
         res.json({ records });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1195,58 +1226,104 @@ bot.onText(/\/import/, async (msg) => {
         `  ]\n` +
         `}\n` +
         `\`\`\`\n\n` +
-        `Or send a Telegram export JSON file.`,
+        `Or send a Telegram export JSON file.\n\n` +
+        `Type /confirm_import after sending the file to import.`,
         { parse_mode: 'Markdown' }
     );
 });
 
-// Handle document (JSON file) uploads
+// =========================
+// HANDLE DOCUMENT (JSON FILE) UPLOADS - FIXED
+// =========================
 bot.on("document", async (msg) => {
-    if (msg.from.id !== OWNER_ID) return;
-    if (!msg.document) return;
+    // Check if user is authorized
+    if (msg.from.id !== OWNER_ID) {
+        return bot.sendMessage(msg.chat.id, "❌ You are not authorized to import data.");
+    }
     
     const fileId = msg.document.file_id;
     const fileName = msg.document.file_name || 'unknown.json';
+    const fileSize = msg.document.file_size || 0;
     
     // Only process JSON files
-    if (!fileName.endsWith('.json')) {
-        bot.sendMessage(msg.chat.id, "❌ Please send a JSON file (.json)");
-        return;
+    if (!fileName.endsWith('.json') && !fileName.endsWith('.JSON')) {
+        return bot.sendMessage(msg.chat.id, "❌ Please send a JSON file (.json)");
+    }
+
+    // Check file size (max 10MB)
+    if (fileSize > 10 * 1024 * 1024) {
+        return bot.sendMessage(msg.chat.id, "❌ File too large. Maximum size is 10MB.");
     }
 
     try {
-        bot.sendMessage(msg.chat.id, "⏳ Processing JSON file...");
+        const processingMsg = await bot.sendMessage(msg.chat.id, "⏳ Processing JSON file... Please wait.");
         
+        // Get file from Telegram
         const file = await bot.getFile(fileId);
         const fileUrl = `https://api.telegram.org/file/bot${TOKEN}/${file.file_path}`;
         
-        // Download file
+        // Download file using fetch
         const response = await fetch(fileUrl);
+        if (!response.ok) {
+            throw new Error(`Failed to download file: ${response.status}`);
+        }
+        
         const jsonText = await response.text();
-        const jsonData = JSON.parse(jsonText);
+        
+        // Parse JSON
+        let jsonData;
+        try {
+            jsonData = JSON.parse(jsonText);
+        } catch (parseErr) {
+            await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
+            return bot.sendMessage(msg.chat.id, "❌ Invalid JSON format. Please check the file content.");
+        }
 
+        // Parse the data
         const records = parseTelegramExport(jsonData);
         if (!records || records.length === 0) {
-            bot.sendMessage(msg.chat.id, "❌ No valid records found in JSON");
-            return;
+            await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
+            return bot.sendMessage(msg.chat.id, "❌ No valid records found in the JSON file. Please check the format.");
         }
 
         // Show preview
-        let previewMsg = `📄 Found ${records.length} records in the JSON file.\n\n`;
-        previewMsg += `Preview (first 3):\n`;
-        records.slice(0, 3).forEach((r, i) => {
-            previewMsg += `${i+1}. Account: ${r.platformAccount || 'N/A'}, WS: ${r.wsAccount || 'N/A'}, Today: ${r.todayDeposit || 0}, Month: ${r.monthDeposit || 0}\n`;
-        });
-
-        // Ask for confirmation
-        bot.sendMessage(msg.chat.id, previewMsg + `\n\nType /confirm_import to import all records, or /cancel to cancel.`);
+        let previewMsg = `📄 **File Analysis Complete**\n\n`;
+        previewMsg += `📊 Found **${records.length}** records in the file.\n\n`;
+        previewMsg += `📋 **Preview (first 5 records):**\n\`\`\`\n`;
         
-        // Store records in memory for confirmation
+        records.slice(0, 5).forEach((r, i) => {
+            previewMsg += `${i+1}. Account: ${r.platformAccount || 'N/A'}, `;
+            previewMsg += `WS: ${r.wsAccount || 'N/A'}, `;
+            previewMsg += `Today: ${r.todayDeposit || 0}, `;
+            previewMsg += `Month: ${r.monthDeposit || 0}\n`;
+        });
+        
+        if (records.length > 5) {
+            previewMsg += `... and ${records.length - 5} more records\n`;
+        }
+        previewMsg += `\`\`\`\n\n`;
+        previewMsg += `⚠️ **Important:** This will check for duplicates and only import new records.\n\n`;
+        previewMsg += `Type **/confirm_import** to import all records, or **/cancel** to cancel.`;
+
+        await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
+        await bot.sendMessage(msg.chat.id, previewMsg, { parse_mode: 'Markdown' });
+        
+        // Store records in memory for confirmation (with timeout)
         global._pendingImport = {
             records: records,
             chatId: msg.chat.id,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            fileName: fileName,
+            fileSize: fileSize
         };
+
+        // Auto-cancel after 5 minutes
+        setTimeout(() => {
+            if (global._pendingImport && global._pendingImport.chatId === msg.chat.id) {
+                global._pendingImport = null;
+                bot.sendMessage(msg.chat.id, "⏰ Import session expired. Please send the file again.");
+            }
+        }, 5 * 60 * 1000);
 
     } catch (err) {
         console.error('Document processing error:', err);
@@ -1254,58 +1331,216 @@ bot.on("document", async (msg) => {
     }
 });
 
-// Import confirmation command
+// =========================
+// CONFIRM IMPORT COMMAND
+// =========================
 bot.onText(/\/confirm_import/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
     
     if (!global._pendingImport || global._pendingImport.chatId !== msg.chat.id) {
-        bot.sendMessage(msg.chat.id, "❌ No pending import found. Send a JSON file first using /import command.");
-        return;
+        return bot.sendMessage(msg.chat.id, "❌ No pending import found. Send a JSON file first.");
     }
 
     // Check if import is too old (5 minutes)
     if (Date.now() - global._pendingImport.timestamp > 5 * 60 * 1000) {
-        bot.sendMessage(msg.chat.id, "❌ Import session expired. Please send the file again.");
         global._pendingImport = null;
-        return;
+        return bot.sendMessage(msg.chat.id, "⏰ Import session expired. Please send the file again.");
     }
 
     const records = global._pendingImport.records;
-    bot.sendMessage(msg.chat.id, `⏳ Importing ${records.length} records...`);
+    const fileName = global._pendingImport.fileName;
+    const totalRecords = records.length;
+    
+    const processingMsg = await bot.sendMessage(msg.chat.id, `⏳ Importing ${totalRecords} records from ${fileName}... Please wait.`);
 
     try {
-        const result = await bulkImportRecords(records, 'telegram_import');
+        // Check MongoDB connection
+        if (mongoose.connection.readyState !== 1) {
+            await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
+            return bot.sendMessage(msg.chat.id, "❌ MongoDB is not connected. Please check the database.");
+        }
+
+        const now = new Date();
+        const collectionDate = now.toISOString().split('T')[0];
+        const collectionMonth = collectionDate.substring(0, 7);
+        
+        let imported = 0;
+        let duplicates = 0;
+        let errors = 0;
+        let failedRecords = [];
+
+        // Process in batches
+        const batchSize = 50;
+        for (let i = 0; i < records.length; i += batchSize) {
+            const batch = records.slice(i, i + batchSize);
+            const batchPromises = batch.map(async (data) => {
+                if (!data.platformAccount) {
+                    errors++;
+                    return null;
+                }
+
+                try {
+                    // Check if already exists
+                    const exists = await Record.findOne({ platformAccount: data.platformAccount });
+                    if (exists) {
+                        duplicates++;
+                        return null;
+                    }
+
+                    const record = new Record({
+                        wsAccount: data.wsAccount || '',
+                        platformAccount: data.platformAccount,
+                        todayDeposit: parseInt(data.todayDeposit) || 0,
+                        monthDeposit: parseInt(data.monthDeposit) || 0,
+                        joinDate: data.joinDate || '',
+                        ipStatus: data.ipStatus || '正常',
+                        developer: data.developer || '',
+                        receptionist: data.receptionist || '',
+                        remark: data.remark || '',
+                        channel: data.channel || '',
+                        senderName: 'Telegram Import',
+                        senderId: msg.from.id,
+                        rawMessage: data.rawText || JSON.stringify(data),
+                        collectionDate: collectionDate,
+                        collectionMonth: collectionMonth,
+                        source: 'telegram_import',
+                        importedAt: now
+                    });
+
+                    await record.save();
+                    accountSet.add(data.platformAccount);
+                    return record;
+                } catch (err) {
+                    if (err.code === 11000) {
+                        duplicates++;
+                    } else {
+                        errors++;
+                        console.error('Import error:', err);
+                        failedRecords.push({ data, error: err.message });
+                    }
+                    return null;
+                }
+            });
+
+            const results = await Promise.all(batchPromises);
+            imported += results.filter(r => r !== null).length;
+            
+            // Update progress
+            const progress = Math.round(((i + batch.length) / records.length) * 100);
+            if (progress % 20 === 0 || i + batch.length >= records.length) {
+                await bot.editMessageText(
+                    `⏳ Importing ${totalRecords} records... ${progress}% complete\n` +
+                    `✅ Imported: ${imported} | ⚠️ Duplicates: ${duplicates} | ❌ Errors: ${errors}`,
+                    { chat_id: msg.chat.id, message_id: processingMsg.message_id }
+                );
+            }
+        }
+
+        // Update import stats
         importStats = {
-            total: result.total,
-            imported: result.imported,
-            duplicates: result.duplicates,
-            errors: result.errors
+            total: totalRecords,
+            imported: imported,
+            duplicates: duplicates,
+            errors: errors
         };
 
-        const statusMsg = `✅ **Import Complete**\n\n` +
-            `📊 Total: ${result.total}\n` +
-            `✅ Imported: ${result.imported}\n` +
-            `⚠️ Duplicates: ${result.duplicates}\n` +
-            `❌ Errors: ${result.errors}\n\n` +
-            `Type /summary to see updated totals.`;
+        // Save failed records to backup
+        if (failedRecords.length > 0) {
+            const backupFile = path.join(__dirname, 'failed_imports.json');
+            let backups = [];
+            if (fs.existsSync(backupFile)) {
+                backups = JSON.parse(fs.readFileSync(backupFile, 'utf-8'));
+            }
+            backups.push({
+                timestamp: new Date().toISOString(),
+                fileName: fileName,
+                records: failedRecords
+            });
+            if (backups.length > 100) {
+                backups = backups.slice(-100);
+            }
+            fs.writeFileSync(backupFile, JSON.stringify(backups, null, 2));
+        }
 
-        bot.sendMessage(msg.chat.id, statusMsg, { parse_mode: 'Markdown' });
+        // Send completion message
+        const statusMsg = `✅ **Import Complete!**\n\n` +
+            `📊 **Summary**\n` +
+            `├─ Total Records: ${totalRecords}\n` +
+            `├─ ✅ Imported: ${imported}\n` +
+            `├─ ⚠️ Duplicates: ${duplicates}\n` +
+            `└─ ❌ Errors: ${errors}\n\n` +
+            `${failedRecords.length > 0 ? `⚠️ ${failedRecords.length} records failed. Check failed_imports.json for details.\n\n` : ''}` +
+            `📈 **Updated Totals**\n` +
+            `├─ Total Records: ${await Record.countDocuments()}\n` +
+            `└─ Unique Accounts: ${accountSet.size}\n\n` +
+            `Type /summary to see detailed statistics.`;
+
+        await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
+        await bot.sendMessage(msg.chat.id, statusMsg, { parse_mode: 'Markdown' });
         
         // Clear pending import
         global._pendingImport = null;
 
     } catch (err) {
         console.error('Import error:', err);
+        await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
         bot.sendMessage(msg.chat.id, `❌ Import failed: ${err.message}`);
+        global._pendingImport = null;
     }
 });
 
+// =========================
+// CANCEL IMPORT COMMAND
+// =========================
 bot.onText(/\/cancel/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
     if (global._pendingImport) {
         global._pendingImport = null;
         bot.sendMessage(msg.chat.id, "✅ Import cancelled");
+    } else {
+        bot.sendMessage(msg.chat.id, "ℹ️ No pending import to cancel");
     }
+});
+
+// =========================
+// HELP IMPORT COMMAND
+// =========================
+bot.onText(/\/help_import/, async (msg) => {
+    if (msg.from.id !== OWNER_ID) return;
+    
+    const helpMsg = `📚 **Import Help**\n\n` +
+        `**How to import data:**\n` +
+        `1. Export your data as JSON from Telegram\n` +
+        `2. Send the JSON file to this bot\n` +
+        `3. Review the preview\n` +
+        `4. Type /confirm_import to import\n` +
+        `5. Type /cancel to cancel\n\n` +
+        `**Supported JSON formats:**\n` +
+        `• Telegram export JSON\n` +
+        `• Array of record objects\n` +
+        `• Object with "records" array\n` +
+        `• Object with "data" array\n` +
+        `• Object with "messages" array\n\n` +
+        `**Record format:**\n` +
+        `{\n` +
+        `  "platformAccount": "9241039856",\n` +
+        `  "wsAccount": "5219241039856",\n` +
+        `  "todayDeposit": 5,\n` +
+        `  "monthDeposit": 20,\n` +
+        `  "joinDate": "18/6",\n` +
+        `  "ipStatus": "正常",\n` +
+        `  "developer": "雪瑶",\n` +
+        `  "receptionist": "涵月"\n` +
+        `}\n\n` +
+        `**Commands:**\n` +
+        `/startcollect - Start collecting\n` +
+        `/stopcollect - Stop collecting\n` +
+        `/summary - View summary\n` +
+        `/status - View bot status\n` +
+        `/import - Import instructions\n` +
+        `/help_import - This help message`;
+    
+    bot.sendMessage(msg.chat.id, helpMsg, { parse_mode: 'Markdown' });
 });
 
 // =========================
