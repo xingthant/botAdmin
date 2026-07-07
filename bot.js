@@ -16,7 +16,6 @@ const TOKEN = process.env.BOT_TOKEN;
 const OWNER_ID = parseInt(process.env.OWNER_ID) || 8033870108;
 const MONGODB_URI = process.env.MONGODB_URI;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-const ALLOWED_USERS = process.env.ALLOWED_USERS ? process.env.ALLOWED_USERS.split(',').map(id => parseInt(id.trim())) : [];
 
 if (!TOKEN) {
     console.error("❌ BOT_TOKEN is required!");
@@ -66,7 +65,7 @@ const bot = new TelegramBot(TOKEN, {
 });
 
 // =========================
-// EXTRACT DATA FUNCTION (Enhanced)
+// EXTRACT DATA FUNCTION - ENHANCED FOR YOUR FORMAT
 // =========================
 function extractData(text) {
     console.log('🔍 Processing text...');
@@ -74,15 +73,37 @@ function extractData(text) {
     // Clean up text - remove extra spaces and normalize
     const cleanText = text.replace(/\s+/g, ' ').trim();
     
-    // Extract WS Account
+    // Extract WS Account - handle both Chinese and English
+    let wsAccount = null;
     const wsMatch = cleanText.match(/(?:Ws账号|WS账号|ws账号|WS帐号|ws帐号)[\s\u3000]*[：:；;][\s\u3000]*(\d+)/i);
-    const wsAccount = wsMatch ? wsMatch[1].trim() : null;
+    if (wsMatch) {
+        wsAccount = wsMatch[1].trim();
+    }
     
-    // Extract Platform Account
+    // If no WS account found, try alternate format
+    if (!wsAccount) {
+        const altWsMatch = cleanText.match(/(?:Ws账号|WS账号|ws账号)[\s]*[:：][\s]*(\d+)/);
+        if (altWsMatch) {
+            wsAccount = altWsMatch[1].trim();
+        }
+    }
+    
+    // Extract Platform Account - handle both Chinese and English
+    let platformAccount = null;
     const accountMatch = cleanText.match(/(?:平台账号|会员账户|会员账号|平台帐号|会员帐号)[\s\u3000]*[：:；;][\s\u3000]*(\d+)/i);
-    let platformAccount = accountMatch ? accountMatch[1].trim() : null;
+    if (accountMatch) {
+        platformAccount = accountMatch[1].trim();
+    }
     
-    // If no platform account found, try to find any 10-13 digit number that's not the WS account
+    // If no platform account found, try alternate format
+    if (!platformAccount) {
+        const altAccountMatch = cleanText.match(/(?:平台账号|会员账户)[\s]*[:：][\s]*(\d+)/);
+        if (altAccountMatch) {
+            platformAccount = altAccountMatch[1].trim();
+        }
+    }
+    
+    // If still no platform account, try to find any 10-13 digit number that's not the WS account
     if (!platformAccount) {
         const allNumbers = cleanText.match(/\b(\d{10,13})\b/g);
         if (allNumbers) {
@@ -98,18 +119,33 @@ function extractData(text) {
         }
     }
     
-    // Extract Join Date
+    // Extract Join Date - handle multiple formats
+    let joinDate = '';
     const dateMatch = cleanText.match(/(?:进粉日期|粉日期|日期|进粉)[\s\u3000]*[：:；;][\s\u3000]*([^\s\n]+)/i);
-    const joinDate = dateMatch ? dateMatch[1].trim() : '';
+    if (dateMatch) {
+        joinDate = dateMatch[1].trim();
+    }
+    
+    // If no date found, try alternate format
+    if (!joinDate) {
+        const altDateMatch = cleanText.match(/(?:进粉日期|粉日期)[\s]*[:：][\s]*([^\s\n]+)/);
+        if (altDateMatch) {
+            joinDate = altDateMatch[1].trim();
+        }
+    }
     
     // Extract IP Status
+    let ipStatus = '正常';
     const ipMatch = cleanText.match(/(?:IP状态|IP)[\s\u3000]*[：:；;][\s\u3000]*([^\s\n]+)/i);
-    const ipStatus = ipMatch ? ipMatch[1].trim() : '正常';
+    if (ipMatch) {
+        ipStatus = ipMatch[1].trim();
+    }
     
     // Extract Developer - Enhanced to handle multiple developers
+    let developer = '';
     const devMatch = cleanText.match(/(?:开发|开发者)[\s\u3000]*[：:；;][\s\u3000]*([^\n]+)/i);
-    let developer = devMatch ? devMatch[1].trim() : '';
-    if (developer) {
+    if (devMatch) {
+        developer = devMatch[1].trim();
         // Clean up developer field
         developer = developer.replace(/\s*\/\/\/\/\/\s*/g, ' // ');
         developer = developer.replace(/\s*\/\s*/g, ' / ');
@@ -118,9 +154,10 @@ function extractData(text) {
     }
     
     // Extract Receptionist
+    let receptionist = '';
     const recMatch = cleanText.match(/(?:推接待|接待)[\s\u3000]*[：:；;][\s\u3000]*([^\n]+)/i);
-    let receptionist = recMatch ? recMatch[1].trim() : '';
-    if (receptionist) {
+    if (recMatch) {
+        receptionist = recMatch[1].trim();
         receptionist = receptionist.replace(/^_+\s*/, '');
         receptionist = receptionist.replace(/\s*_+\s*$/, '');
         receptionist = receptionist.replace(/_/g, ' ');
@@ -140,15 +177,29 @@ function extractData(text) {
     if (monthMatch) {
         monthDeposit = parseInt(monthMatch[1], 10) || 0;
     }
+    
+    // If month deposit not found, try with Unicode characters
+    if (!monthMatch) {
+        const altMonthMatch = cleanText.match(/本月首存[\s]*[:：][\s]*(\d+)/);
+        if (altMonthMatch) {
+            monthDeposit = parseInt(altMonthMatch[1], 10) || 0;
+        }
+    }
 
     // Extract additional fields if present
+    let remark = '';
     const remarkMatch = cleanText.match(/(?:备注|备注)[\s\u3000]*[：:；;][\s\u3000]*([^\n]+)/i);
-    const remark = remarkMatch ? remarkMatch[1].trim() : '';
+    if (remarkMatch) {
+        remark = remarkMatch[1].trim();
+    }
 
+    let channel = '';
     const channelMatch = cleanText.match(/(?:渠道|来源)[\s\u3000]*[：:；;][\s\u3000]*([^\n]+)/i);
-    const channel = channelMatch ? channelMatch[1].trim() : '';
+    if (channelMatch) {
+        channel = channelMatch[1].trim();
+    }
 
-    return {
+    const result = {
         wsAccount: wsAccount,
         platformAccount: platformAccount,
         todayDeposit: todayDeposit,
@@ -161,10 +212,13 @@ function extractData(text) {
         channel: channel,
         rawText: cleanText
     };
+    
+    console.log('📝 Extracted:', result);
+    return result;
 }
 
 // =========================
-// PARSE TELEGRAM EXPORT - ENHANCED
+// PARSE TELEGRAM EXPORT - COMPLETE FIX FOR YOUR FORMAT
 // =========================
 function parseTelegramExport(jsonData) {
     try {
@@ -174,60 +228,143 @@ function parseTelegramExport(jsonData) {
         }
         
         let records = [];
+        console.log('📊 Parsing JSON data...');
+        console.log('Data type:', typeof data);
+        console.log('Is array:', Array.isArray(data));
         
         // Handle different JSON structures
         if (Array.isArray(data)) {
+            console.log('✅ Data is an array with', data.length, 'items');
             records = data;
         } else if (data.records && Array.isArray(data.records)) {
+            console.log('✅ Found records array with', data.records.length, 'items');
             records = data.records;
         } else if (data.data && Array.isArray(data.data)) {
+            console.log('✅ Found data array with', data.data.length, 'items');
             records = data.data;
         } else if (data.messages && Array.isArray(data.messages)) {
-            // Telegram export format
+            console.log('✅ Found messages array with', data.messages.length, 'items');
             records = data.messages
                 .filter(msg => msg.text && typeof msg.text === 'string')
                 .map(msg => extractData(msg.text))
                 .filter(r => r && r.platformAccount);
         } else if (data.result && Array.isArray(data.result)) {
+            console.log('✅ Found result array with', data.result.length, 'items');
             records = data.result;
         } else {
             // Try to find any array in the object
+            console.log('🔍 Searching for arrays in object...');
+            let found = false;
             for (const key in data) {
                 if (Array.isArray(data[key]) && data[key].length > 0) {
+                    console.log(`✅ Found array in key "${key}" with ${data[key].length} items`);
                     // Check if it looks like records
                     const first = data[key][0];
-                    if (first && (first.platformAccount || first.account || first.id)) {
-                        records = data[key];
-                        break;
+                    if (first && typeof first === 'object') {
+                        // Check for Chinese field names
+                        if (first['平台账号'] || first['Ws账号'] || first.platformAccount || first.account) {
+                            records = data[key];
+                            found = true;
+                            break;
+                        }
                     }
                 }
             }
+            
+            // If still no records found, try to extract from object values
+            if (!found) {
+                console.log('🔍 Trying to extract from object...');
+                for (const key in data) {
+                    if (typeof data[key] === 'object' && data[key] !== null && !Array.isArray(data[key])) {
+                        const obj = data[key];
+                        if (obj['平台账号'] || obj.platformAccount || obj.account || obj['Ws账号']) {
+                            records.push(obj);
+                        }
+                    }
+                }
+                console.log(`📊 Extracted ${records.length} records from object`);
+            }
         }
         
-        // Normalize records
-        return records.map(r => {
+        console.log(`📊 Total records found: ${records.length}`);
+        
+        // If we have records but they're in a different format, try to extract
+        if (records.length > 0 && typeof records[0] === 'object') {
+            // Check if the records are already in the right format
+            const sample = records[0];
+            if (sample['平台账号'] || sample['Ws账号']) {
+                console.log('✅ Records found with Chinese field names');
+            }
+        }
+        
+        // Normalize records - handle both English and Chinese field names
+        const normalizedRecords = records.map(r => {
             // If it's a string, try to extract data
             if (typeof r === 'string') {
                 return extractData(r);
             }
-            // If it's an object, normalize fields
-            return {
-                platformAccount: r.platformAccount || r.account || r.id || null,
-                wsAccount: r.wsAccount || r.ws || r.ws_id || null,
-                todayDeposit: parseInt(r.todayDeposit || r.today || 0),
-                monthDeposit: parseInt(r.monthDeposit || r.month || 0),
-                joinDate: r.joinDate || r.date || r.join_date || '',
-                ipStatus: r.ipStatus || r.ip || r.ip_status || '正常',
-                developer: r.developer || r.dev || r.developer_name || '',
-                receptionist: r.receptionist || r.reception || r.receptionist_name || '',
-                remark: r.remark || r.notes || '',
-                channel: r.channel || r.source || '',
-                rawText: JSON.stringify(r)
-            };
-        }).filter(r => r.platformAccount);
+            
+            // If it's already a record object, extract the fields
+            if (typeof r === 'object' && r !== null) {
+                // Check for Chinese field names first
+                const platformAccount = r['平台账号'] || r.platformAccount || r.account || r.id || null;
+                const wsAccount = r['Ws账号'] || r['WS账号'] || r.wsAccount || r.ws || r.ws_id || null;
+                const todayDeposit = parseInt(r['今日首存'] || r.todayDeposit || r.today || 0);
+                const monthDeposit = parseInt(r['本月首存'] || r.monthDeposit || r.month || 0);
+                const joinDate = r['进粉日期'] || r['粉日期'] || r.joinDate || r.date || r.join_date || '';
+                const ipStatus = r['IP状态'] || r.ipStatus || r.ip || r.ip_status || '正常';
+                const developer = r['开发'] || r['开发者'] || r.developer || r.dev || r.developer_name || '';
+                const receptionist = r['推接待'] || r['接待'] || r.receptionist || r.reception || r.receptionist_name || '';
+                const remark = r['备注'] || r.remark || r.notes || '';
+                const channel = r['渠道'] || r['来源'] || r.channel || r.source || '';
+                
+                // If platformAccount is still null, try to find any 10-13 digit number
+                let finalPlatformAccount = platformAccount;
+                if (!finalPlatformAccount) {
+                    // Look for a number in the object
+                    for (const key in r) {
+                        if (typeof r[key] === 'string') {
+                            const match = r[key].match(/\b(\d{10,13})\b/);
+                            if (match) {
+                                finalPlatformAccount = match[1];
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // If we have a platform account, return the normalized record
+                if (finalPlatformAccount) {
+                    return {
+                        platformAccount: finalPlatformAccount,
+                        wsAccount: wsAccount,
+                        todayDeposit: todayDeposit,
+                        monthDeposit: monthDeposit,
+                        joinDate: joinDate,
+                        ipStatus: ipStatus,
+                        developer: developer,
+                        receptionist: receptionist,
+                        remark: remark,
+                        channel: channel,
+                        rawText: JSON.stringify(r)
+                    };
+                }
+            }
+            
+            return null;
+        }).filter(r => r && r.platformAccount);
+        
+        console.log(`✅ Normalized ${normalizedRecords.length} valid records`);
+        
+        // Log first few records for debugging
+        if (normalizedRecords.length > 0) {
+            console.log('📋 First record sample:', JSON.stringify(normalizedRecords[0], null, 2));
+        }
+        
+        return normalizedRecords;
         
     } catch (err) {
-        console.error('Error parsing JSON:', err);
+        console.error('❌ Error parsing JSON:', err);
         return null;
     }
 }
