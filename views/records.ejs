@@ -6,10 +6,10 @@
     <title>All Records — Systems Analytics Hub</title>
     <style>
         :root {
-            --bg-main: #09090b; /* Pure Slate Black */
-            --bg-card: #141416; /* Deep Onyx Card Backing */
+            --bg-main: #09090b;
+            --bg-card: #141416;
             --bg-input: #1d1d21;
-            --primary: #6366f1; /* Vibrant Modern Indigo Accent */
+            --primary: #6366f1;
             --primary-hover: #4f46e5;
             --success: #10b981;
             --success-bg: rgba(16, 185, 129, 0.1);
@@ -17,9 +17,9 @@
             --danger: #ef4444;
             --danger-bg: rgba(239, 68, 68, 0.1);
             --danger-text: #fca5a5;
-            --text-main: #f8fafc; /* High Contrast White Text */
-            --text-muted: #94a3b8; /* Muted Slate */
-            --border-color: #27272a; /* Sophisticated Edge Separation */
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: #27272a;
             --radius-lg: 14px;
             --radius-md: 10px;
             --radius-sm: 6px;
@@ -47,7 +47,6 @@
             margin: 0 auto;
         }
 
-        /* Top Elegant Navbar Layout */
         .navbar {
             background: var(--bg-card);
             padding: 24px 32px;
@@ -108,7 +107,6 @@
             flex-wrap: wrap;
         }
 
-        /* Action Buttons Base Rules */
         .btn {
             display: inline-flex;
             align-items: center;
@@ -166,7 +164,6 @@
             background: rgba(239, 68, 68, 0.2);
         }
 
-        /* Search Section Panel Layout */
         .search-section {
             display: flex;
             gap: 16px;
@@ -218,7 +215,6 @@
             border-color: var(--primary);
         }
 
-        /* Data Panel / Table Structure Groupings */
         .table-container {
             background: var(--bg-card);
             border-radius: var(--radius-lg);
@@ -272,7 +268,6 @@
             background-color: #1a1a1e;
         }
 
-        /* Specialized Premium Typography Classes */
         .account-primary {
             font-weight: 600;
             color: var(--text-main);
@@ -293,7 +288,6 @@
             font-weight: 600;
         }
 
-        /* Dynamic Status Badges */
         .badge {
             display: inline-flex;
             align-items: center;
@@ -314,7 +308,6 @@
             color: var(--danger-text);
         }
 
-        /* Micro Action Configurations */
         .action-cell {
             display: flex;
             gap: 8px;
@@ -359,7 +352,6 @@
             display: inline-block;
         }
 
-        /* Modernized Elegant Pagination CSS */
         .pagination {
             display: flex;
             gap: 6px;
@@ -396,7 +388,6 @@
             cursor: not-allowed;
         }
 
-        /* Clean Glass Overlay Modals & Form Drawers */
         .modal {
             display: none;
             position: fixed;
@@ -507,7 +498,6 @@
             flex: 1;
         }
 
-        /* System Dynamic Toasts Notification Panels */
         .notification {
             position: fixed;
             bottom: 24px;
@@ -534,7 +524,6 @@
         .notification.error { background: var(--danger); color: #fff; }
         .notification.info { background: var(--primary); color: #fff; }
 
-        /* Elegant Empty Visual Space styling */
         .empty-state {
             text-align: center;
             padding: 64px 24px;
@@ -551,7 +540,6 @@
             font-size: 15px;
         }
 
-        /* Mobile Responsive Adjustments */
         @media (max-width: 1024px) {
             body { padding: 20px 12px; }
             td, th { padding: 14px 16px; }
@@ -567,7 +555,6 @@
 </head>
 <body>
     <div class="container">
-        <!-- Dashboard Top Toolbar -->
         <nav class="navbar">
             <div class="nav-left">
                 <h2>All Records</h2>
@@ -584,7 +571,6 @@
             </div>
         </nav>
 
-        <!-- Search Filtering Panel Component -->
         <div class="search-section">
             <div class="search-input-wrapper">
                 <input type="text" id="searchInput" placeholder="Search by Ws Account, Platform, Receptionist, Developer, or Sender..." 
@@ -602,7 +588,6 @@
             <button class="btn btn-secondary" onclick="resetSearch()">Reset</button>
         </div>
 
-        <!-- System Relational Main Datatable Grid -->
         <div class="table-container">
             <table>
                 <thead>
@@ -633,11 +618,9 @@
             </table>
         </div>
 
-        <!-- Render Pagination Section UI Component -->
         <div class="pagination" id="pagination"></div>
     </div>
 
-    <!-- Smooth Backdrop-Filtered Form Overlay Drawer Model -->
     <div id="recordModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -720,7 +703,6 @@
         let sortOrder = 'desc';
         let recordsCached = [];
 
-        // Dynamic System Notifications Toasts Engine
         function showNotification(message, type = 'info') {
             const existing = document.querySelector('.notification');
             if (existing) existing.remove();
@@ -738,7 +720,6 @@
             }, 4000);
         }
 
-        // Processing Application Engine Operations 
         function searchRecords() {
             const query = document.getElementById('searchInput').value.trim();
             const field = document.getElementById('searchField').value;
@@ -887,7 +868,6 @@
             if (currentQuery) searchRecords(); else loadRecords(1);
         }
 
-        // Overlay Modals Handling
         function openAddModal() {
             document.getElementById('modalTitle').textContent = 'Add Management Track Metric';
             document.getElementById('editId').value = '';
@@ -901,10 +881,13 @@
 
         function fetchAndEditRecord(id) {
             const target = recordsCached.find(r => r._id === id);
-            if (target) openEditModal(target);
-            else {
-                fetch(`/api/records/${id}`).then(res => res.json()).then(record => openEditModal(record))
-                .catch(() => showNotification('Error gathering contextual server object parameters.', 'error'));
+            if (target) {
+                openEditModal(target);
+            } else {
+                fetch(`/api/records/${id}`)
+                    .then(res => res.json())
+                    .then(record => openEditModal(record))
+                    .catch(() => showNotification('Error gathering contextual server object parameters.', 'error'));
             }
         }
 
@@ -925,16 +908,28 @@
             document.getElementById('recordModal').classList.add('active');
         }
 
-        function closeModal() { document.getElementById('recordModal').classList.remove('active'); }
-        window.onclick = function(e) { if (e.target === document.getElementById('recordModal')) closeModal(); };
+        function closeModal() { 
+            document.getElementById('recordModal').classList.remove('active'); 
+        }
 
-        // Data Management Syncing Operations
+        window.onclick = function(e) { 
+            if (e.target === document.getElementById('recordModal')) closeModal(); 
+        };
+
         function saveRecord(event) {
             event.preventDefault();
+            
             const editId = document.getElementById('editId').value;
+            const platformAccount = document.getElementById('formPlatformAccount').value.trim();
+            
+            if (!platformAccount) {
+                showNotification('⚠️ Platform account is required!', 'error');
+                return;
+            }
+            
             const data = {
                 wsAccount: document.getElementById('formWsAccount').value.trim(),
-                platformAccount: document.getElementById('formPlatformAccount').value.trim(),
+                platformAccount: platformAccount,
                 todayDeposit: parseInt(document.getElementById('formTodayDeposit').value) || 0,
                 monthDeposit: parseInt(document.getElementById('formMonthDeposit').value) || 0,
                 joinDate: document.getElementById('formJoinDate').value.trim(),
@@ -945,6 +940,8 @@
                 rawMessage: document.getElementById('formRawMessage').value.trim()
             };
 
+            console.log('📤 Sending data:', data);
+
             const method = editId ? 'PUT' : 'POST';
             const url = editId ? `/api/records/${editId}` : '/api/records';
 
@@ -953,33 +950,69 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             })
-            .then(res => { if (!res.ok) throw new Error(); return res.json(); })
-            .then(() => {
-                showNotification(editId ? 'Metric parameters rewritten.' : 'New relational log mapped.', 'success');
-                closeModal();
-                loadRecords(currentPage);
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(err => { throw new Error(err.error || 'Server error'); });
+                }
+                return res.json();
             })
-            .catch(() => showNotification('Database synchronization failed.', 'error'));
+            .then(result => {
+                if (result.success) {
+                    showNotification(result.message || 'Record saved successfully!', 'success');
+                    closeModal();
+                    if (currentQuery) {
+                        searchRecords();
+                    } else {
+                        loadRecords(currentPage);
+                    }
+                } else {
+                    showNotification('❌ Error: ' + (result.error || 'Unknown error'), 'error');
+                }
+            })
+            .catch(err => {
+                console.error('❌ Error saving record:', err);
+                showNotification('❌ Error: ' + err.message, 'error');
+            });
         }
 
         function deleteRecord(id) {
             if (confirm('Drop database tracking log structure row permanently? This cannot be reversed.')) {
                 fetch(`/api/records/${id}`, { method: 'DELETE' })
-                    .then(res => { if (!res.ok) throw new Error(); return res.json(); })
+                    .then(res => {
+                        if (!res.ok) {
+                            return res.json().then(err => { throw new Error(err.error || 'Server error'); });
+                        }
+                        return res.json();
+                    })
                     .then(() => {
                         showNotification('Log entity removed from main table cluster layout maps.', 'success');
-                        loadRecords(currentPage);
+                        if (currentQuery) {
+                            searchRecords();
+                        } else {
+                            loadRecords(currentPage);
+                        }
                     })
-                    .catch(() => showNotification('Could not safely wipe transactional node target details.', 'error'));
+                    .catch(err => {
+                        console.error('Delete error:', err);
+                        showNotification('Could not safely wipe transactional node target details: ' + err.message, 'error');
+                    });
             }
         }
 
         function exportCSV() {
-            window.location.href = '/api/export/csv' + (currentQuery ? `?q=${encodeURIComponent(currentQuery)}&field=${currentField}` : '');
+            let url = '/api/export/csv';
+            if (currentQuery) {
+                url += `?q=${encodeURIComponent(currentQuery)}&field=${currentField}`;
+            }
+            window.location.href = url;
         }
 
         function exportJSON() {
-            window.location.href = '/api/export/json' + (currentQuery ? `?q=${encodeURIComponent(currentQuery)}&field=${currentField}` : '');
+            let url = '/api/export/json';
+            if (currentQuery) {
+                url += `?q=${encodeURIComponent(currentQuery)}&field=${currentField}`;
+            }
+            window.location.href = url;
         }
 
         document.addEventListener('DOMContentLoaded', () => loadRecords(1));
