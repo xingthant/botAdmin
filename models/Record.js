@@ -4,59 +4,70 @@ const recordSchema = new mongoose.Schema({
     wsAccount: {
         type: String,
         trim: true,
-        default: ''
+        default: '',
+        maxlength: 50
     },
     platformAccount: {
         type: String,
-        required: true,
+        required: [true, 'Platform account is required'],
         unique: true,
         trim: true,
-        index: true
+        index: true,
+        maxlength: 50
     },
     todayDeposit: {
         type: Number,
         default: 0,
-        min: 0
+        min: 0,
+        max: 999999999 // Max 999 million
     },
     monthDeposit: {
         type: Number,
         default: 0,
-        min: 0
+        min: 0,
+        max: 999999999
     },
     joinDate: {
         type: String,
         trim: true,
-        default: ''
+        default: '',
+        maxlength: 50
     },
     ipStatus: {
         type: String,
         trim: true,
-        default: '正常'
+        default: '正常',
+        maxlength: 50
     },
     developer: {
         type: String,
         trim: true,
-        default: ''
+        default: '',
+        maxlength: 200
     },
     receptionist: {
         type: String,
         trim: true,
-        default: ''
+        default: '',
+        maxlength: 100
     },
     remark: {
         type: String,
         trim: true,
-        default: ''
+        default: '',
+        maxlength: 500
     },
     channel: {
         type: String,
         trim: true,
-        default: ''
+        default: '',
+        maxlength: 100
     },
     senderName: {
         type: String,
         trim: true,
-        default: 'Unknown'
+        default: 'Unknown',
+        maxlength: 100
     },
     senderId: {
         type: Number,
@@ -64,7 +75,8 @@ const recordSchema = new mongoose.Schema({
     },
     rawMessage: {
         type: String,
-        default: ''
+        default: '',
+        maxlength: 5000
     },
     collectionDate: {
         type: String,
@@ -98,47 +110,6 @@ recordSchema.index({ developer: 1 });
 recordSchema.index({ receptionist: 1 });
 recordSchema.index({ senderName: 1 });
 recordSchema.index({ createdAt: -1 });
-
-// Static method to get daily stats
-recordSchema.statics.getDailyStats = async function(date) {
-    const result = await this.aggregate([
-        { $match: { collectionDate: date } },
-        { $group: {
-            _id: null,
-            count: { $sum: 1 },
-            totalTodayDeposit: { $sum: "$todayDeposit" },
-            totalMonthDeposit: { $sum: "$monthDeposit" }
-        }}
-    ]);
-    return result[0] || { count: 0, totalTodayDeposit: 0, totalMonthDeposit: 0 };
-};
-
-// Static method to get monthly stats
-recordSchema.statics.getMonthlyStats = async function(month) {
-    const result = await this.aggregate([
-        { $match: { collectionMonth: month } },
-        { $group: {
-            _id: null,
-            count: { $sum: 1 },
-            totalTodayDeposit: { $sum: "$todayDeposit" },
-            totalMonthDeposit: { $sum: "$monthDeposit" }
-        }}
-    ]);
-    return result[0] || { count: 0, totalTodayDeposit: 0, totalMonthDeposit: 0 };
-};
-
-// Static method to get developer stats
-recordSchema.statics.getDeveloperStats = async function() {
-    return await this.aggregate([
-        { $match: { developer: { $ne: "" } } },
-        { $group: {
-            _id: "$developer",
-            count: { $sum: 1 },
-            totalDeposit: { $sum: "$monthDeposit" }
-        }},
-        { $sort: { count: -1 } }
-    ]);
-};
 
 const Record = mongoose.model('Record', recordSchema);
 
