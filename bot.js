@@ -1,3 +1,4 @@
+const fetch = require("node-fetch");
 require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
 const fs = require("fs");
@@ -8,7 +9,6 @@ const mongoose = require("mongoose");
 const Record = require("./models/Record");
 const multer = require("multer");
 const crypto = require("crypto");
-const fetch = require("node-fetch");
 
 // =========================
 // ENVIRONMENT VALIDATION
