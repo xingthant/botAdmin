@@ -8,6 +8,7 @@ const mongoose = require("mongoose");
 const Record = require("./models/Record");
 const multer = require("multer");
 const crypto = require("crypto");
+const fetch = require("node-fetch");
 
 // =========================
 // ENVIRONMENT VALIDATION
@@ -60,7 +61,13 @@ const bot = new TelegramBot(TOKEN, {
     polling: {
         autoStart: false,
         params: {
-            timeout: 30
+            timeout: 10
+        }
+    },
+    request: {
+        timeout: 30000,
+        pool: {
+            maxSockets: 1
         }
     }
 });
@@ -1323,15 +1330,24 @@ function startExpressServer() {
 async function startBot() {
     try {
         await connectMongoDB();
-        bot.startPolling();
-        console.log("🤖 Bot polling started");
+        // Stop any existing polling to prevent 409 conflict
+        try {
+            bot.stopPolling();
+        } catch (e) {}
+        // Start polling after a short delay
+        setTimeout(() => {
+            bot.startPolling();
+            console.log("🤖 Bot polling started");
+        }, 2000);
         startExpressServer();
         
         setInterval(processQueue, 10000);
     } catch (err) {
         console.error("❌ Failed to start bot:", err);
-        bot.startPolling();
-        console.log("🤖 Bot started without MongoDB");
+        setTimeout(() => {
+            bot.startPolling();
+            console.log("🤖 Bot started without MongoDB");
+        }, 2000);
         startExpressServer();
     }
 }
