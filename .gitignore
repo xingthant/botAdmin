@@ -1,8 +1,77 @@
+# Dependencies
 node_modules/
+
+# Environment variables (NEVER commit)
 .env
+.env.local
+
+# Uploads
+uploads/
+
+# Backup files
+backup.json
+failed_imports.json
+
+# Logs
 *.log
+npm-debug.log*
+
+# Diagnostic scripts (local only)
+check.js
+check2.js
+check3.js
+verify.js
+cleanup.js
+count.js
+import-local.js
+short-ws.js
+
+# OS files
 .DS_Store
-*.txt
-*.csv
-report_*.txt
-export_*.csv
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Parts folder
+parts/
+EOFcat > .gitignore << 'EOF'
+# Dependencies
+node_modules/
+
+# Environment variables (NEVER commit)
+.env
+.env.local
+
+# Uploads
+uploads/
+
+# Backup files
+backup.json
+failed_imports.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Diagnostic scripts (local only)
+check.js
+check2.js
+check3.js
+verify.js
+cleanup.js
+count.js
+import-local.js
+short-ws.js
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Parts folder
+parts/

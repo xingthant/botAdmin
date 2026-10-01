@@ -8,15 +8,15 @@ const session = require("express-session");
 const mongoose = require("mongoose");
 const Record = require("./models/Record");
 const multer = require("multer");
-const crypto = require("crypto");
 
 // =========================
 // ENVIRONMENT VALIDATION
 // =========================
 const TOKEN = process.env.BOT_TOKEN;
-const OWNER_ID = parseInt(process.env.OWNER_ID) || 8033870108;
+const OWNER_ID = parseInt(process.env.OWNER_ID) || 8475328848;
 const MONGODB_URI = process.env.MONGODB_URI;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const SESSION_SECRET = process.env.SESSION_SECRET;
 
 if (!TOKEN) {
     console.error("❌ BOT_TOKEN is required!");
@@ -28,6 +28,10 @@ if (!MONGODB_URI) {
 }
 if (!ADMIN_PASSWORD) {
     console.error("❌ ADMIN_PASSWORD is required!");
+    process.exit(1);
+}
+if (!SESSION_SECRET) {
+    console.error("❌ SESSION_SECRET is required!");
     process.exit(1);
 }
 
@@ -46,6 +50,7 @@ let totalMonthDeposit = 0;
 let collectionStartTime = null;
 let isMongoConnected = false;
 let messageQueue = [];
+const MAX_QUEUE_SIZE = 10000;
 let isProcessingQueue = false;
 let importStats = {
     total: 0,
@@ -73,155 +78,80 @@ const bot = new TelegramBot(TOKEN, {
 });
 
 // =========================
+// TEXT FLATTENING HELPER
+// =========================
+// Flattens Telegram's text array (with {type, text} entities) into one string.
+function flattenText(text) {
+    if (typeof text === 'string') return text;
+    if (!Array.isArray(text)) return '';
+    return text.map(item => {
+        if (typeof item === 'string') return item;
+        if (typeof item === 'object' && item && item.text) return item.text;
+        return '';
+    }).join('');
+}
+
+// =========================
+// FIELD EXTRACTION HELPER
+// =========================
+// Extracts the value after a label. Supports separators: : ： ; ； ➤ ⇛ =
+// allowSlash=true → allows digits, /, -, . (for dates like 27/6)
+function extractField(text, labelRegex, allowSlash = false, allowInternalSpace = false) {
+    // Match label, then skip anything that's not a digit, then grab digits
+    const labelMatch = text.match(new RegExp(labelRegex.source + String.raw`[^\d]*`, 'i'));
+    if (!labelMatch) return null;
+
+    const afterLabel = text.substring(labelMatch.index + labelMatch[0].length);
+    let cleaned;
+
+    if (allowInternalSpace) {
+        const chunk = afterLabel.substring(0, 30);
+        const m = chunk.match(/^[\d\s]+/);
+        if (!m) return null;
+        cleaned = m[0].replace(/\s+/g, '').substring(0, 13);
+    } else if (allowSlash) {
+        const chunk = afterLabel.substring(0, 20);
+        const m = chunk.match(/^[\d\/\-\.\s]+/);
+        if (!m) return null;
+        cleaned = m[0].replace(/\s+/g, '').substring(0, 15);
+    } else {
+        const chunk = afterLabel.substring(0, 20);
+        const m = chunk.match(/^\d+/);
+        if (!m) return null;
+        cleaned = m[0];
+    }
+
+    return cleaned.trim() || null;
+}
+
+// =========================
 // EXTRACT DATA FUNCTION
 // =========================
+// Only extracts a record if the text contains BOTH "ws账号" AND "进粉日期".
+// This filters out backend replies, marketing spam, and random chatter.
 function extractData(text) {
-    console.log('🔍 Processing text...');
-    
-    let cleanText = '';
-    if (Array.isArray(text)) {
-        cleanText = text.map(item => {
-            if (typeof item === 'string') return item;
-            if (typeof item === 'object' && item.text) return item.text;
-            return '';
-        }).join(' ');
-    } else {
-        cleanText = text;
-    }
-    
-    cleanText = cleanText.replace(/\s+/g, ' ').trim();
-    
-    // Extract WS Account
-    let wsAccount = null;
-    const wsMatch = cleanText.match(/(?:Ws账号|WS账号|ws账号|WS帐号|ws帐号)[\s\u3000]*[：:；;][\s\u3000]*(\d+)/i);
-    if (wsMatch) {
-        wsAccount = wsMatch[1].trim();
-    }
-    if (!wsAccount) {
-        const altWsMatch = cleanText.match(/(?:Ws账号|WS账号|ws账号)[\s]*[:：][\s]*(\d+)/);
-        if (altWsMatch) {
-            wsAccount = altWsMatch[1].trim();
-        }
-    }
-    
-    // Extract Platform Account
-    let platformAccount = null;
-    const accountMatch = cleanText.match(/(?:平台账号|会员账户|会员账号|平台帐号|会员帐号)[\s\u3000]*[：:；;][\s\u3000]*(\d+)/i);
-    if (accountMatch) {
-        platformAccount = accountMatch[1].trim();
-    }
-    if (!platformAccount) {
-        const altAccountMatch = cleanText.match(/(?:平台账号|会员账户)[\s]*[:：][\s]*(\d+)/);
-        if (altAccountMatch) {
-            platformAccount = altAccountMatch[1].trim();
-        }
-    }
-    if (!platformAccount) {
-        const allNumbers = cleanText.match(/\b(\d{10,13})\b/g);
-        if (allNumbers) {
-            for (const num of allNumbers) {
-                if (num !== wsAccount) {
-                    platformAccount = num;
-                    break;
-                }
-            }
-            if (!platformAccount && allNumbers.length > 0) {
-                platformAccount = allNumbers[0];
-            }
-        }
-    }
-    
-    // Extract Join Date
-    let joinDate = '';
-    const dateMatch = cleanText.match(/(?:进粉日期|粉日期|日期|进粉)[\s\u3000]*[：:；;][\s\u3000]*([^\s\n]+)/i);
-    if (dateMatch) {
-        joinDate = dateMatch[1].trim();
-    }
-    if (!joinDate) {
-        const altDateMatch = cleanText.match(/(?:进粉日期|粉日期)[\s]*[:：][\s]*([^\s\n]+)/);
-        if (altDateMatch) {
-            joinDate = altDateMatch[1].trim();
-        }
-    }
-    
-    // Extract IP Status
-    let ipStatus = '正常';
-    const ipMatch = cleanText.match(/(?:IP状态|IP)[\s\u3000]*[：:；;][\s\u3000]*([^\s\n]+)/i);
-    if (ipMatch) {
-        ipStatus = ipMatch[1].trim();
-    }
-    
-    // Extract Developer
-    let developer = '';
-    const devMatch = cleanText.match(/(?:开发|开发者)[\s\u3000]*[：:；;][\s\u3000]*([^\n]+)/i);
-    if (devMatch) {
-        developer = devMatch[1].trim();
-        developer = developer.replace(/\s*\/\/\/\/\/\s*/g, ' // ');
-        developer = developer.replace(/\s*\/\s*/g, ' / ');
-        developer = developer.replace(/\s{2,}/g, ' ');
-        developer = developer.trim();
-    }
-    
-    // Extract Receptionist
-    let receptionist = '';
-    const recMatch = cleanText.match(/(?:推接待|接待)[\s\u3000]*[：:；;][\s\u3000]*([^\n]+)/i);
-    if (recMatch) {
-        receptionist = recMatch[1].trim();
-        receptionist = receptionist.replace(/^_+\s*/, '');
-        receptionist = receptionist.replace(/\s*_+\s*$/, '');
-        receptionist = receptionist.replace(/_/g, ' ');
-        receptionist = receptionist.trim();
+    const cleanText = flattenText(text).replace(/\s+/g, ' ').trim();
+
+    if (!/ws\s*账号/i.test(cleanText)) return null;
+    if (!/进粉日期/.test(cleanText)) return null;
+
+    const wsAccount       = extractField(cleanText, /ws\s*账号/, false, true);   // ← TRUE
+    const platformAccount = extractField(cleanText, /会员账户/, false, true);    // ← TRUE
+    const joinDate        = extractField(cleanText, /进粉日期/, true, false);
+    const receptionist    = extractField(cleanText, /推送后端/, false, false);
+
+    if (!wsAccount || !platformAccount) {
+        console.log('⚠️ Skipped: missing wsAccount or platformAccount');
+        return null;
     }
 
-    // Extract Deposits
-    let todayDeposit = 0;
-    let monthDeposit = 0;
-    
-    const todayMatch = cleanText.match(/今日首存[\s\u3000]*[：:；;][\s\u3000]*(\d+)/i);
-    if (todayMatch) {
-        todayDeposit = parseInt(todayMatch[1], 10) || 0;
-    }
-    
-    const monthMatch = cleanText.match(/本月首存[\s\u3000]*[：:；;][\s\u3000]*(\d+)/i);
-    if (monthMatch) {
-        monthDeposit = parseInt(monthMatch[1], 10) || 0;
-    }
-    if (!monthMatch) {
-        const altMonthMatch = cleanText.match(/本月首存[\s]*[:：][\s]*(\d+)/);
-        if (altMonthMatch) {
-            monthDeposit = parseInt(altMonthMatch[1], 10) || 0;
-        }
-    }
-
-    // Extract additional fields
-    let remark = '';
-    const remarkMatch = cleanText.match(/(?:备注|备注)[\s\u3000]*[：:；;][\s\u3000]*([^\n]+)/i);
-    if (remarkMatch) {
-        remark = remarkMatch[1].trim();
-    }
-
-    let channel = '';
-    const channelMatch = cleanText.match(/(?:渠道|来源)[\s\u3000]*[：:；;][\s\u3000]*([^\n]+)/i);
-    if (channelMatch) {
-        channel = channelMatch[1].trim();
-    }
-
-    const result = {
-        wsAccount: wsAccount,
-        platformAccount: platformAccount,
-        todayDeposit: todayDeposit,
-        monthDeposit: monthDeposit,
-        joinDate: joinDate,
-        ipStatus: ipStatus,
-        developer: developer,
-        receptionist: receptionist,
-        remark: remark,
-        channel: channel,
+    return {
+        wsAccount,
+        platformAccount,
+        joinDate: joinDate || '',
+        receptionist: receptionist || '',
         rawText: cleanText
     };
-    
-    console.log('📝 Extracted:', result);
-    return result;
 }
 
 // =========================
@@ -233,97 +163,81 @@ function parseTelegramExport(jsonData) {
         if (typeof jsonData === 'string') {
             data = JSON.parse(jsonData);
         }
-        
-        let records = [];
-        console.log('📊 Parsing JSON data...');
-        
-        if (data.messages && Array.isArray(data.messages)) {
-            console.log('✅ Found messages array with', data.messages.length, 'items');
-            
-            const messageRecords = data.messages
-                .filter(msg => msg.type === 'message' && msg.text)
-                .map(msg => {
-                    let text = '';
-                    if (Array.isArray(msg.text)) {
-                        text = msg.text.map(item => {
-                            if (typeof item === 'string') return item;
-                            if (typeof item === 'object' && item.text) return item.text;
-                            return '';
-                        }).join(' ');
-                    } else if (typeof msg.text === 'string') {
-                        text = msg.text;
-                    }
-                    
-                    const extracted = extractData(text);
-                    if (msg.from) {
-                        extracted.senderName = msg.from;
-                    }
-                    return extracted;
-                })
-                .filter(r => r && r.platformAccount);
-            
-            records = messageRecords;
-            console.log(`✅ Extracted ${records.length} records from messages`);
-        } else {
-            // Fallback parsing
-            console.log('🔍 Using generic parsing...');
-            
-            if (Array.isArray(data)) {
-                records = data;
-            } else if (data.records && Array.isArray(data.records)) {
-                records = data.records;
-            } else if (data.data && Array.isArray(data.data)) {
-                records = data.data;
-            } else {
-                for (const key in data) {
-                    if (Array.isArray(data[key]) && data[key].length > 0) {
-                        records = data[key];
-                        break;
-                    }
-                }
-            }
-            
-            records = records.map(r => {
-                if (typeof r === 'string') {
-                    return extractData(r);
-                }
-                if (typeof r === 'object' && r !== null) {
-                    const platformAccount = r['平台账号'] || r.platformAccount || r.account || r.id || null;
-                    if (platformAccount) {
-                        return {
-                            platformAccount: platformAccount,
-                            wsAccount: r['Ws账号'] || r.wsAccount || r.ws || null,
-                            todayDeposit: parseInt(r['今日首存'] || r.todayDeposit || 0),
-                            monthDeposit: parseInt(r['本月首存'] || r.monthDeposit || 0),
-                            joinDate: r['进粉日期'] || r['粉日期'] || r.joinDate || '',
-                            ipStatus: r['IP状态'] || r.ipStatus || '正常',
-                            developer: r['开发'] || r['开发者'] || r.developer || '',
-                            receptionist: r['推接待'] || r['接待'] || r.receptionist || '',
-                            remark: r['备注'] || r.remark || '',
-                            channel: r['渠道'] || r['来源'] || r.channel || '',
-                            rawText: JSON.stringify(r)
-                        };
-                    }
-                }
-                return null;
-            }).filter(r => r && r.platformAccount);
+
+        if (!data.messages || !Array.isArray(data.messages)) {
+            console.log('❌ No messages array found in JSON');
+            return [];
         }
-        
-        console.log(`✅ Total valid records: ${records.length}`);
+
+        console.log(`📊 Total messages in file: ${data.messages.length}`);
+
+        const records = [];
+        let skippedNonMessage = 0;
+        let skippedNoMarker   = 0;
+        let skippedIncomplete = 0;
+
+        for (const msg of data.messages) {
+            if (msg.type !== 'message') { skippedNonMessage++; continue; }
+            if (!msg.text) { skippedNonMessage++; continue; }
+
+            const text = flattenText(msg.text);
+            if (!text) { skippedNonMessage++; continue; }
+
+            // ✅ GATE 1: must contain "ws账号"
+            if (!/ws\s*账号/i.test(text)) { skippedNoMarker++; continue; }
+            // ✅ GATE 2: must contain "进粉日期"
+            if (!/进粉日期/.test(text)) { skippedNoMarker++; continue; }
+
+            // Extract only the fields we care about
+            const wsAccount       = extractField(text, /ws\s*账号/, false);
+            const platformAccount = extractField(text, /会员账户/, false);
+            const joinDate        = extractField(text, /进粉日期/, true);
+            const receptionist    = extractField(text, /推送后端/, false);
+
+            if (!wsAccount || !platformAccount) { skippedIncomplete++; continue; }
+
+            // Sender name: prefer msg.from, fall back to from_id, then Unknown
+            let senderName = 'Unknown';
+            if (msg.from && typeof msg.from === 'string' && msg.from.trim()) {
+                senderName = msg.from.trim();
+            } else if (msg.from_id) {
+                senderName = msg.from_id;
+            }
+
+            records.push({
+                wsAccount,
+                platformAccount,
+                joinDate: joinDate || '',
+                receptionist: receptionist || '',
+                senderName,
+                rawText: text
+            });
+        }
+
+        console.log(`✅ Valid lead records: ${records.length}`);
+        console.log(`   ⏭️  Skipped non-message: ${skippedNonMessage}`);
+        console.log(`   ⏭️  Skipped no ws/进粉 marker: ${skippedNoMarker}`);
+        console.log(`   ⏭️  Skipped incomplete fields: ${skippedIncomplete}`);
+
         if (records.length > 0) {
             console.log('📋 First record sample:', JSON.stringify(records[0], null, 2));
         }
+
         return records;
-        
+
     } catch (err) {
         console.error('❌ Error parsing JSON:', err);
-        return null;
+        return [];
     }
 }
 
 // =========================
 // SAVE RECORD WITH RETRY
 // =========================
+// Returns:
+//   true        → saved successfully
+//   'duplicate' → already exists in DB
+//   false       → failed and backed up locally
 async function saveRecordWithRetry(recordData, maxRetries = 3) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
@@ -339,12 +253,12 @@ async function saveRecordWithRetry(recordData, maxRetries = 3) {
             return true;
         } catch (err) {
             console.log(`❌ Save attempt ${attempt} failed:`, err.message);
-            
+
             if (err.code === 11000) {
                 console.log(`⚠️ Record already exists in DB`);
-                return true;
+                return 'duplicate';
             }
-            
+
             if (attempt === maxRetries) {
                 console.error('❌ All save attempts failed, backing up locally');
                 saveToLocalBackup(recordData);
@@ -381,24 +295,29 @@ function saveToLocalBackup(data) {
 }
 
 // =========================
-// PROCESS MESSAGE
+// PROCESS MESSAGE (LIVE BOT)
 // =========================
 async function processMessage(msg) {
     if (!collecting) return;
     if (!msg.text) return;
     if (msg.text.startsWith("/")) return;
-    
+
     if (mongoose.connection.readyState !== 1) {
         console.log("📥 Queuing message (MongoDB not ready)");
         messageQueue.push(msg);
+        if (messageQueue.length > MAX_QUEUE_SIZE) {
+            console.warn(`⚠️ messageQueue exceeded ${MAX_QUEUE_SIZE}, dropping oldest`);
+            messageQueue.shift();
+        }
         return;
     }
 
-    const text = msg.text.trim();
-    const data = extractData(text);
+    const text = flattenText(msg.text).trim();
 
-    if (!data.platformAccount) {
-        console.log(`⚠️ No account found`);
+    // extractData returns null if the message isn't a real lead post
+    const data = extractData(text);
+    if (!data) {
+        console.log('⏭️ Not a lead post, skipping');
         return;
     }
 
@@ -407,39 +326,43 @@ async function processMessage(msg) {
         return;
     }
 
-    accountSet.add(data.platformAccount);
-    totalRecords++;
-    totalTodayDeposit += data.todayDeposit;
-    totalMonthDeposit += data.monthDeposit;
-
-    const senderName = msg.from.username ? `@${msg.from.username}` : `${msg.from.first_name || 'User'}`;
+    const senderName = msg.from && msg.from.username
+        ? `@${msg.from.username}`
+        : (msg.from && msg.from.first_name)
+            ? `${msg.from.first_name}`
+            : 'Unknown';
 
     try {
         const now = new Date();
-        const collectionDate = now.toISOString().split('T')[0];
+        const collectionDate  = now.toISOString().split('T')[0];
         const collectionMonth = collectionDate.substring(0, 7);
-        
+
         const recordData = {
-            wsAccount: data.wsAccount,
-            platformAccount: data.platformAccount,
-            todayDeposit: data.todayDeposit,
-            monthDeposit: data.monthDeposit,
-            joinDate: data.joinDate,
-            ipStatus: data.ipStatus,
-            developer: data.developer,
-            receptionist: data.receptionist,
-            remark: data.remark || '',
-            channel: data.channel || '',
-            senderName: senderName,
-            senderId: msg.from.id,
-            rawMessage: text,
-            collectionDate: collectionDate,
-            collectionMonth: collectionMonth
+            wsAccount:        data.wsAccount,
+            platformAccount:  data.platformAccount,
+            todayDeposit:     0,
+            monthDeposit:     0,
+            joinDate:         data.joinDate || '',
+            ipStatus:         '正常',
+            developer:        '',
+            receptionist:     data.receptionist || '',
+            remark:           '',
+            channel:          '',
+            senderName:       senderName,
+            senderId:         (msg.from && msg.from.id) ? msg.from.id : 0,
+            rawMessage:       text,
+            collectionDate:   collectionDate,
+            collectionMonth:  collectionMonth
         };
 
         const saved = await saveRecordWithRetry(recordData);
-        if (saved) {
+        if (saved === true) {
+            accountSet.add(data.platformAccount);
+            totalRecords++;
             console.log(`✅ Saved: ${data.platformAccount}`);
+        } else if (saved === 'duplicate') {
+            accountSet.add(data.platformAccount);
+            console.log(`⏭️ Duplicate in DB: ${data.platformAccount}`);
         } else {
             console.log(`⚠️ Failed to save: ${data.platformAccount} (backed up locally)`);
         }
@@ -453,16 +376,16 @@ async function processMessage(msg) {
 // =========================
 async function processQueue() {
     if (isProcessingQueue || messageQueue.length === 0) return;
-    
+
     isProcessingQueue = true;
     console.log(`📤 Processing ${messageQueue.length} queued messages`);
-    
+
     while (messageQueue.length > 0) {
         const msg = messageQueue.shift();
         await processMessage(msg);
         await new Promise(resolve => setTimeout(resolve, 100));
     }
-    
+
     isProcessingQueue = false;
     console.log('✅ Queue processing complete');
 }
@@ -545,14 +468,14 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 
 app.use(session({
-    secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { 
+    cookie: {
         secure: false,
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000,
@@ -601,7 +524,7 @@ app.post('/login', (req, res) => {
     const { password } = req.body;
     const trimmedPassword = password ? password.trim() : '';
     const trimmedAdminPassword = ADMIN_PASSWORD ? ADMIN_PASSWORD.trim() : '';
-    
+
     if (trimmedPassword === trimmedAdminPassword) {
         req.session.isAdmin = true;
         req.session.save((err) => {
@@ -639,13 +562,13 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
             unique = await Record.distinct('platformAccount').then(arr => arr.length);
             todayCount = await Record.countDocuments({ collectionDate: today });
             monthCount = await Record.countDocuments({ collectionMonth: currentMonth });
-            
+
             const todayResult = await Record.aggregate([
                 { $match: { collectionDate: today } },
                 { $group: { _id: null, total: { $sum: "$todayDeposit" } } }
             ]);
             todaySum = todayResult[0]?.total || 0;
-            
+
             const monthResult = await Record.aggregate([
                 { $match: { collectionMonth: currentMonth } },
                 { $group: { _id: null, total: { $sum: "$monthDeposit" } } }
@@ -653,7 +576,7 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
             monthSum = monthResult[0]?.total || 0;
 
             stats = await Record.aggregate([
-                { $group: { 
+                { $group: {
                     _id: { $ifNull: ["$source", "telegram"] },
                     count: { $sum: 1 }
                 }}
@@ -690,9 +613,9 @@ app.get('/records', isAuthenticated, (req, res) => {
 });
 
 app.get('/import', isAuthenticated, (req, res) => {
-    res.render('import', { 
-        success: null, 
-        error: null, 
+    res.render('import', {
+        success: null,
+        error: null,
         stats: null,
         preview: null
     });
@@ -707,13 +630,13 @@ app.get('/', (req, res) => {
 // =========================
 const upload = multer({ 
     dest: 'uploads/',
-    limits: { fileSize: 10 * 1024 * 1024 }
+    limits: { fileSize: 200 * 1024 * 1024 }
 });
 
 app.post('/api/import/json', isAuthenticated, upload.single('jsonFile'), async (req, res) => {
     try {
         let jsonData;
-        
+
         if (req.file) {
             const fileContent = fs.readFileSync(req.file.path, 'utf-8');
             jsonData = JSON.parse(fileContent);
@@ -734,7 +657,8 @@ app.post('/api/import/json', isAuthenticated, upload.single('jsonFile'), async (
         res.json({
             success: true,
             total: records.length,
-            preview: preview,
+            preview: records.slice(0, 5),   // for the preview table (5 rows)
+            records: records,               // ← FULL payload for confirm step
             message: `Found ${records.length} records. Click confirm to import.`
         });
 
@@ -752,7 +676,7 @@ app.post('/api/import/confirm', isAuthenticated, async (req, res) => {
         }
 
         const result = await bulkImportRecords(records, 'json_import');
-        
+
         importStats = {
             total: result.total,
             imported: result.imported,
@@ -785,85 +709,76 @@ async function bulkImportRecords(recordsData, source = 'telegram_import') {
         return { imported: 0, duplicates: 0, errors: recordsData.length, total: recordsData.length };
     }
 
-    let imported = 0;
-    let duplicates = 0;
-    let errors = 0;
-
     const now = new Date();
-    const collectionDate = now.toISOString().split('T')[0];
+    const collectionDate  = now.toISOString().split('T')[0];
     const collectionMonth = collectionDate.substring(0, 7);
 
-    const batchSize = 50;
-    const batches = [];
+    // Build docs in memory
+    const docs = [];
+    let errors = 0;
 
     for (const data of recordsData) {
-        if (!data.platformAccount) {
+        if (!data.platformAccount || !data.wsAccount) {
             errors++;
             continue;
         }
-
-        const exists = await Record.findOne({ platformAccount: data.platformAccount });
-        if (exists) {
-            duplicates++;
-            continue;
-        }
-
-        const record = new Record({
-            wsAccount: data.wsAccount || '',
-            platformAccount: data.platformAccount,
-            todayDeposit: parseInt(data.todayDeposit) || 0,
-            monthDeposit: parseInt(data.monthDeposit) || 0,
-            joinDate: data.joinDate || '',
-            ipStatus: data.ipStatus || '正常',
-            developer: data.developer || '',
-            receptionist: data.receptionist || '',
-            remark: data.remark || '',
-            channel: data.channel || '',
-            senderName: data.senderName || 'System Import',
-            senderId: 0,
-            rawMessage: data.rawText || JSON.stringify(data),
-            collectionDate: collectionDate,
-            collectionMonth: collectionMonth,
-            source: source,
-            importedAt: now
+        docs.push({
+            wsAccount:        data.wsAccount,
+            platformAccount:  data.platformAccount,
+            todayDeposit:     0,
+            monthDeposit:     0,
+            joinDate:         data.joinDate || '',
+            ipStatus:         '正常',
+            developer:        '',
+            receptionist:     data.receptionist || '',
+            remark:           '',
+            channel:          '',
+            senderName:       data.senderName || 'System Import',
+            senderId:         0,
+            rawMessage:       data.rawText || JSON.stringify(data),
+            collectionDate:   collectionDate,
+            collectionMonth:  collectionMonth,
+            source:           source,
+            importedAt:       now
         });
-
-        batches.push(record);
     }
 
-    for (let i = 0; i < batches.length; i += batchSize) {
-        const batch = batches.slice(i, i + batchSize);
+    let imported   = 0;
+    let duplicates = 0;
+
+    // Insert with ordered:false so one duplicate doesn't stop the batch
+    const batchSize = 100;
+    for (let i = 0; i < docs.length; i += batchSize) {
+        const batch = docs.slice(i, i + batchSize);
         try {
             const result = await Record.insertMany(batch, { ordered: false });
             imported += result.length;
-            result.forEach(record => {
-                if (record.platformAccount) {
-                    accountSet.add(record.platformAccount);
-                }
-            });
+            result.forEach(r => { if (r.platformAccount) accountSet.add(r.platformAccount); });
         } catch (err) {
-            if (err.code === 11000) {
-                duplicates += err.writeErrors ? err.writeErrors.filter(e => e.code === 11000).length : 0;
-                if (err.result && err.result.insertedDocs) {
-                    imported += err.result.insertedDocs.length;
-                    err.result.insertedDocs.forEach(record => {
-                        if (record.platformAccount) {
-                            accountSet.add(record.platformAccount);
-                        }
-                    });
-                }
-            } else {
+            const writeErrors = (err && err.writeErrors) ? err.writeErrors : [];
+            const dupCount = writeErrors.filter(e => e.code === 11000).length;
+            const otherErrors = writeErrors.length - dupCount;
+
+            duplicates += dupCount;
+            errors     += otherErrors;
+
+            const insertedDocs = (err && err.result && err.result.insertedDocs) ? err.result.insertedDocs : [];
+            imported += insertedDocs.length;
+            insertedDocs.forEach(r => { if (r.platformAccount) accountSet.add(r.platformAccount); });
+
+            if (!err.writeErrors) {
                 console.error('Batch import error:', err);
                 errors += batch.length;
             }
         }
     }
 
+    console.log(`📊 Bulk import: total=${recordsData.length}, imported=${imported}, dup=${duplicates}, errors=${errors}`);
     return { imported, duplicates, errors, total: recordsData.length };
 }
 
 // =========================
-// API ROUTES - ALL FIXED
+// API ROUTES
 // =========================
 
 // GET stats
@@ -873,7 +788,7 @@ app.get('/api/stats', isAuthenticated, async (req, res) => {
         const unique = mongoose.connection.readyState === 1 ? await Record.distinct('platformAccount').then(arr => arr.length) : 0;
         const today = new Date().toISOString().split('T')[0];
         const todayCount = mongoose.connection.readyState === 1 ? await Record.countDocuments({ collectionDate: today }) : 0;
-        
+
         res.json({
             totalRecords: total,
             uniqueAccounts: unique,
@@ -911,6 +826,7 @@ app.post('/api/toggle', isAuthenticated, async (req, res) => {
 });
 
 // GET records with pagination
+// GET records with pagination
 app.get('/api/records', isAuthenticated, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -919,19 +835,26 @@ app.get('/api/records', isAuthenticated, async (req, res) => {
         const sortField = req.query.sort || 'collectedAt';
         const sortOrder = req.query.order === 'asc' ? 1 : -1;
 
+        console.log(`📥 /api/records: page=${page}, limit=${limit}, skip=${skip}, sort=${sortField} ${sortOrder > 0 ? 'ASC' : 'DESC'}`);
+
         if (mongoose.connection.readyState !== 1) {
+            console.log('  ⚠️ MongoDB not connected');
             return res.json({ records: [], total: 0, page: 1, totalPages: 0 });
         }
 
         const sortObj = {};
         sortObj[sortField] = sortOrder;
+        sortObj['_id'] = 1;   // ✅ stable tiebreaker (prevents unstable pagination)
 
         const records = await Record.find()
             .sort(sortObj)
             .skip(skip)
-            .limit(limit);
+            .limit(limit)
+            .allowDiskUse(true);   // ✅ prevents 32 MB sort memory error
 
         const total = await Record.countDocuments();
+
+        console.log(`  ✅ Returned ${records.length} records (skip ${skip})`);
 
         res.json({
             records,
@@ -940,6 +863,7 @@ app.get('/api/records', isAuthenticated, async (req, res) => {
             totalPages: Math.ceil(total / limit)
         });
     } catch (err) {
+        console.error('  ❌ /api/records error:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -949,13 +873,13 @@ app.get('/api/search', isAuthenticated, async (req, res) => {
     try {
         const query = req.query.q;
         const field = req.query.field || 'all';
-        
+
         if (!query || mongoose.connection.readyState !== 1) {
             return res.json({ records: [] });
         }
 
         let searchQuery = {};
-        
+
         if (field === 'all') {
             searchQuery = {
                 $or: [
@@ -973,7 +897,9 @@ app.get('/api/search', isAuthenticated, async (req, res) => {
             searchQuery = { [field]: { $regex: query, $options: 'i' } };
         }
 
-        const records = await Record.find(searchQuery).limit(100);
+        const records = await Record.find(searchQuery)
+            .limit(100)
+            .allowDiskUse(true);
         res.json({ records });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -981,18 +907,18 @@ app.get('/api/search', isAuthenticated, async (req, res) => {
 });
 
 // =========================
-// CRUD OPERATIONS - FIXED ROUTES
+// CRUD OPERATIONS
 // =========================
 
-// CREATE new record (POST /api/records)
+// CREATE new record
 app.post('/api/records', isAuthenticated, async (req, res) => {
     try {
         console.log('📝 Adding new record...');
         console.log('Request body:', req.body);
-        
+
         if (mongoose.connection.readyState !== 1) {
             console.error('❌ MongoDB not connected. State:', mongoose.connection.readyState);
-            return res.status(503).json({ 
+            return res.status(503).json({
                 error: 'MongoDB is not connected',
                 readyState: mongoose.connection.readyState
             });
@@ -1018,10 +944,10 @@ app.post('/api/records', isAuthenticated, async (req, res) => {
         }
 
         const cleanPlatformAccount = platformAccount.toString().trim();
-        
+
         const existing = await Record.findOne({ platformAccount: cleanPlatformAccount });
         if (existing) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 error: `Platform account ${cleanPlatformAccount} already exists`
             });
         }
@@ -1048,38 +974,36 @@ app.post('/api/records', isAuthenticated, async (req, res) => {
             collectionMonth: collectionMonth
         };
 
-        console.log('📝 Record data to save:', recordData);
-
         const record = new Record(recordData);
         await record.save();
-        
+
         accountSet.add(cleanPlatformAccount);
-        
+
         console.log('✅ Record saved successfully:', record._id);
-        
-        res.json({ 
-            success: true, 
-            message: 'Record added successfully', 
-            record: record 
+
+        res.json({
+            success: true,
+            message: 'Record added successfully',
+            record: record
         });
 
     } catch (err) {
         console.error('❌ Error adding record:', err);
-        
+
         if (err.code === 11000) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 error: 'Duplicate key error. This platform account already exists.'
             });
         }
-        
+
         if (err.name === 'ValidationError') {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 error: 'Validation error',
                 details: err.message
             });
         }
-        
-        res.status(500).json({ 
+
+        res.status(500).json({
             error: err.message || 'Failed to add record'
         });
     }
@@ -1156,7 +1080,7 @@ app.put('/api/records/:id', isAuthenticated, async (req, res) => {
         record.rawMessage = rawMessage || record.rawMessage;
 
         await record.save();
-        
+
         res.json({ success: true, message: 'Record updated successfully', record });
     } catch (err) {
         console.error('Error updating record:', err);
@@ -1173,7 +1097,7 @@ app.delete('/api/records/:id', isAuthenticated, async (req, res) => {
         if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ error: 'MongoDB not connected' });
         }
-        
+
         const deleted = await Record.findByIdAndDelete(req.params.id);
         if (deleted) {
             const exists = await Record.findOne({ platformAccount: deleted.platformAccount });
@@ -1190,7 +1114,7 @@ app.delete('/api/records/:id', isAuthenticated, async (req, res) => {
 });
 
 // =========================
-// EXPORT ROUTES - FIXED
+// EXPORT ROUTES
 // =========================
 
 // EXPORT CSV
@@ -1199,7 +1123,7 @@ app.get('/api/export/csv', isAuthenticated, async (req, res) => {
         if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ error: 'MongoDB not connected' });
         }
-        
+
         let query = {};
         if (req.query.q) {
             const searchQuery = req.query.q;
@@ -1218,9 +1142,11 @@ app.get('/api/export/csv', isAuthenticated, async (req, res) => {
                 query = { [field]: { $regex: searchQuery, $options: 'i' } };
             }
         }
-        
-        const records = await Record.find(query).sort({ collectedAt: -1 });
-        
+
+        const records = await Record.find(query)
+            .sort({ collectedAt: -1, _id: 1 })
+            .allowDiskUse(true);
+
         let csv = "Platform Account,WS Account,T Deposit,M Deposit,Join Date,IP Status,Developer,Receptionist,Sender,Date,Message\n";
         records.forEach(r => {
             const message = (r.rawMessage || '').replace(/"/g, '""');
@@ -1241,7 +1167,7 @@ app.get('/api/export/json', isAuthenticated, async (req, res) => {
         if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ error: 'MongoDB not connected' });
         }
-        
+
         let query = {};
         if (req.query.q) {
             const searchQuery = req.query.q;
@@ -1260,14 +1186,21 @@ app.get('/api/export/json', isAuthenticated, async (req, res) => {
                 query = { [field]: { $regex: searchQuery, $options: 'i' } };
             }
         }
-        
-        const records = await Record.find(query).sort({ collectedAt: -1 });
+
+        const records = await Record.find(query)
+            .sort({ collectedAt: -1, _id: 1 })
+            .allowDiskUse(true);
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Content-Disposition', `attachment; filename=export_${Date.now()}.json`);
         res.json(records);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+// Alias: /api/export → CSV (for backwards compatibility with dashboard)
+app.get('/api/export', isAuthenticated, async (req, res) => {
+    res.redirect('/api/export/csv');
 });
 
 // =========================
@@ -1278,7 +1211,7 @@ app.post('/api/clear', isAuthenticated, async (req, res) => {
         if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ error: 'MongoDB not connected' });
         }
-        
+
         await Record.deleteMany({});
         accountSet.clear();
         records = [];
@@ -1330,17 +1263,15 @@ function startExpressServer() {
 async function startBot() {
     try {
         await connectMongoDB();
-        // Stop any existing polling to prevent 409 conflict
         try {
             bot.stopPolling();
         } catch (e) {}
-        // Start polling after a short delay
         setTimeout(() => {
             bot.startPolling();
             console.log("🤖 Bot polling started");
         }, 2000);
         startExpressServer();
-        
+
         setInterval(processQueue, 10000);
     } catch (err) {
         console.error("❌ Failed to start bot:", err);
@@ -1378,7 +1309,7 @@ bot.onText(/\/summary/, async (msg) => {
         const monthCount = await Record.countDocuments({ collectionMonth: currentMonth });
         const totalCount = await Record.countDocuments();
         const status = collecting ? "🟢 Active" : "🔴 Stopped";
-        bot.sendMessage(msg.chat.id, 
+        bot.sendMessage(msg.chat.id,
             `📊 Summary\n\nStatus: ${status}\nToday Records: ${todayCount}\nMonth Records: ${monthCount}\nTotal Records: ${totalCount}\nQueued: ${messageQueue.length}\nUnique Accounts: ${accountSet.size}`
         );
     } catch (err) {
@@ -1399,7 +1330,7 @@ bot.onText(/\/status/, async (msg) => {
     const status = collecting ? "🟢 Active" : "🔴 Stopped";
     const total = mongoose.connection.readyState === 1 ? await Record.countDocuments() : 0;
     const mongoStatus = mongoose.connection.readyState === 1 ? '✅ Connected' : '❌ Disconnected';
-    bot.sendMessage(msg.chat.id, 
+    bot.sendMessage(msg.chat.id,
         `🤖 Bot Status\n\nStatus: ${status}\nMongoDB: ${mongoStatus}\nTotal Records: ${total}\nUnique Accounts: ${accountSet.size}\nQueued: ${messageQueue.length}`
     );
 });
@@ -1407,22 +1338,26 @@ bot.onText(/\/status/, async (msg) => {
 bot.onText(/\/test/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
     const testMessages = [
-        "ws账号 : 5219241039856\n平台账号:9241039856\n粉日期：18/6\nIP状态：正常\n今日首存 ：5\n本月首存 ：20\n开发：雪瑶\n推接待：涵月"
+        "席位                 ➤         君恒💸\nws账号            ➤      5217205745325\n会员账户         ➤       7205745325\n进粉日期         ➤      27/6\n推送后端         ➤      令煜\n当天总引飞     ➤      4"
     ];
     for (const testMsg of testMessages) {
         const data = extractData(testMsg);
-        await bot.sendMessage(msg.chat.id, 
-            `📝 Test Extraction:\n平台账号: ${data.platformAccount || 'Not found'}\n今日首存: ${data.todayDeposit}\n本月首存: ${data.monthDeposit}\n开发: ${data.developer}\n接待: ${data.receptionist}`
+        if (!data) {
+            await bot.sendMessage(msg.chat.id, "⚠️ extractData returned null — not a valid lead post");
+            continue;
+        }
+        await bot.sendMessage(msg.chat.id,
+            `📝 Test Extraction:\nwsAccount: ${data.wsAccount}\nplatformAccount: ${data.platformAccount}\njoinDate: ${data.joinDate}\nreceptionist: ${data.receptionist}`
         );
     }
 });
 
 bot.onText(/\/import/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
-    bot.sendMessage(msg.chat.id, 
+    bot.sendMessage(msg.chat.id,
         `📥 JSON Import Instructions\n\n` +
         `Send me a JSON file exported from Telegram.\n\n` +
-        `The bot will automatically extract all account records from the messages.\n\n` +
+        `The bot will extract only messages containing "ws账号" AND "进粉日期".\n\n` +
         `Type /confirm_import after sending the file to import.`
     );
 });
@@ -1434,11 +1369,11 @@ bot.on("document", async (msg) => {
     if (msg.from.id !== OWNER_ID) {
         return bot.sendMessage(msg.chat.id, "❌ You are not authorized to import data.");
     }
-    
+
     const fileId = msg.document.file_id;
     const fileName = msg.document.file_name || 'unknown.json';
     const fileSize = msg.document.file_size || 0;
-    
+
     if (!fileName.endsWith('.json') && !fileName.endsWith('.JSON')) {
         return bot.sendMessage(msg.chat.id, "❌ Please send a JSON file (.json)");
     }
@@ -1449,17 +1384,17 @@ bot.on("document", async (msg) => {
 
     try {
         const processingMsg = await bot.sendMessage(msg.chat.id, "⏳ Processing JSON file... Please wait.");
-        
+
         const file = await bot.getFile(fileId);
         const fileUrl = `https://api.telegram.org/file/bot${TOKEN}/${file.file_path}`;
-        
+
         const response = await fetch(fileUrl);
         if (!response.ok) {
             throw new Error(`Failed to download file: ${response.status}`);
         }
-        
+
         const jsonText = await response.text();
-        
+
         let jsonData;
         try {
             jsonData = JSON.parse(jsonText);
@@ -1477,29 +1412,28 @@ bot.on("document", async (msg) => {
         await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
 
         let summary = `📄 File Analysis Complete\n\n`;
-        summary += `📊 Found ${records.length} records in the file.\n\n`;
+        summary += `📊 Found ${records.length} valid lead records.\n\n`;
         summary += `📋 Preview (first 5 records):\n`;
         summary += `─────────────────────\n`;
-        
+
         const maxPreview = Math.min(records.length, 5);
         for (let i = 0; i < maxPreview; i++) {
             const r = records[i];
-            summary += `${i+1}. Account: ${r.platformAccount || 'N/A'}, `;
-            summary += `WS: ${r.wsAccount || 'N/A'}, `;
-            summary += `Today: ${r.todayDeposit || 0}, `;
-            summary += `Month: ${r.monthDeposit || 0}\n`;
+            summary += `${i + 1}. WS: ${r.wsAccount || 'N/A'}, `;
+            summary += `Account: ${r.platformAccount || 'N/A'}, `;
+            summary += `Join: ${r.joinDate || 'N/A'}\n`;
         }
-        
+
         if (records.length > 5) {
             summary += `... and ${records.length - 5} more records\n`;
         }
-        
+
         summary += `─────────────────────\n\n`;
-        summary += `⚠️ Important: This will check for duplicates and only import new records.\n\n`;
+        summary += `⚠️ This will check for duplicates and only import new records.\n\n`;
         summary += `Type /confirm_import to import all records, or /cancel to cancel.`;
 
         await bot.sendMessage(msg.chat.id, summary);
-        
+
         global._pendingImport = {
             records: records,
             chatId: msg.chat.id,
@@ -1526,7 +1460,7 @@ bot.on("document", async (msg) => {
 // =========================
 bot.onText(/\/confirm_import/, async (msg) => {
     if (msg.from.id !== OWNER_ID) return;
-    
+
     if (!global._pendingImport || global._pendingImport.chatId !== msg.chat.id) {
         return bot.sendMessage(msg.chat.id, "❌ No pending import found. Send a JSON file first.");
     }
@@ -1539,7 +1473,7 @@ bot.onText(/\/confirm_import/, async (msg) => {
     const records = global._pendingImport.records;
     const fileName = global._pendingImport.fileName;
     const totalRecords = records.length;
-    
+
     const processingMsg = await bot.sendMessage(msg.chat.id, `⏳ Importing ${totalRecords} records from ${fileName}... Please wait.`);
 
     try {
@@ -1548,105 +1482,27 @@ bot.onText(/\/confirm_import/, async (msg) => {
             return bot.sendMessage(msg.chat.id, "❌ MongoDB is not connected. Please check the database.");
         }
 
-        const now = new Date();
-        const collectionDate = now.toISOString().split('T')[0];
-        const collectionMonth = collectionDate.substring(0, 7);
-        
-        let imported = 0;
-        let duplicates = 0;
-        let errors = 0;
-        let failedRecords = [];
-
-        const batchSize = 50;
-        for (let i = 0; i < records.length; i += batchSize) {
-            const batch = records.slice(i, i + batchSize);
-            const batchPromises = batch.map(async (data) => {
-                if (!data.platformAccount) {
-                    errors++;
-                    return null;
-                }
-
-                try {
-                    const exists = await Record.findOne({ platformAccount: data.platformAccount });
-                    if (exists) {
-                        duplicates++;
-                        return null;
-                    }
-
-                    const record = new Record({
-                        wsAccount: data.wsAccount || '',
-                        platformAccount: data.platformAccount,
-                        todayDeposit: parseInt(data.todayDeposit) || 0,
-                        monthDeposit: parseInt(data.monthDeposit) || 0,
-                        joinDate: data.joinDate || '',
-                        ipStatus: data.ipStatus || '正常',
-                        developer: data.developer || '',
-                        receptionist: data.receptionist || '',
-                        remark: data.remark || '',
-                        channel: data.channel || '',
-                        senderName: data.senderName || 'Telegram Import',
-                        senderId: msg.from.id,
-                        rawMessage: data.rawText || JSON.stringify(data),
-                        collectionDate: collectionDate,
-                        collectionMonth: collectionMonth,
-                        source: 'telegram_import',
-                        importedAt: now
-                    });
-
-                    await record.save();
-                    accountSet.add(data.platformAccount);
-                    return record;
-                } catch (err) {
-                    if (err.code === 11000) {
-                        duplicates++;
-                    } else {
-                        errors++;
-                        console.error('Import error:', err);
-                        failedRecords.push({ data, error: err.message });
-                    }
-                    return null;
-                }
-            });
-
-            const results = await Promise.all(batchPromises);
-            imported += results.filter(r => r !== null).length;
-            
-            const progress = Math.round(((i + batch.length) / records.length) * 100);
-            if (progress % 20 === 0 || i + batch.length >= records.length) {
-                try {
-                    await bot.editMessageText(
-                        `⏳ Importing ${totalRecords} records... ${progress}% complete\n` +
-                        `✅ Imported: ${imported} | ⚠️ Duplicates: ${duplicates} | ❌ Errors: ${errors}`,
-                        { chat_id: msg.chat.id, message_id: processingMsg.message_id }
-                    );
-                } catch (editErr) {
-                    console.log('Edit message error:', editErr.message);
-                }
-            }
-        }
+        // Use the shared bulk import helper
+        const result = await bulkImportRecords(records, 'telegram_import');
+        const imported   = result.imported;
+        const duplicates = result.duplicates;
+        const errors     = result.errors;
 
         importStats = {
-            total: totalRecords,
-            imported: imported,
-            duplicates: duplicates,
-            errors: errors
+            total:      result.total,
+            imported:   result.imported,
+            duplicates: result.duplicates,
+            errors:     result.errors
         };
 
-        if (failedRecords.length > 0) {
-            const backupFile = path.join(__dirname, 'failed_imports.json');
-            let backups = [];
-            if (fs.existsSync(backupFile)) {
-                backups = JSON.parse(fs.readFileSync(backupFile, 'utf-8'));
-            }
-            backups.push({
-                timestamp: new Date().toISOString(),
-                fileName: fileName,
-                records: failedRecords
-            });
-            if (backups.length > 100) {
-                backups = backups.slice(-100);
-            }
-            fs.writeFileSync(backupFile, JSON.stringify(backups, null, 2));
+        // Final progress edit
+        try {
+            await bot.editMessageText(
+                `⏳ Import complete: ✅ ${imported} imported | ⚠️ ${duplicates} duplicates | ❌ ${errors} errors`,
+                { chat_id: msg.chat.id, message_id: processingMsg.message_id }
+            );
+        } catch (editErr) {
+            console.log('Edit message error:', editErr.message);
         }
 
         const totalRecordsCount = await Record.countDocuments();
@@ -1658,11 +1514,7 @@ bot.onText(/\/confirm_import/, async (msg) => {
         statusMsg += `├─ ✅ Imported: ${imported}\n`;
         statusMsg += `├─ ⚠️ Duplicates: ${duplicates}\n`;
         statusMsg += `└─ ❌ Errors: ${errors}\n\n`;
-        
-        if (failedRecords.length > 0) {
-            statusMsg += `⚠️ ${failedRecords.length} records failed. Check failed_imports.json for details.\n\n`;
-        }
-        
+
         statusMsg += `📈 Updated Totals\n`;
         statusMsg += `├─ Total Records: ${totalRecordsCount}\n`;
         statusMsg += `└─ Unique Accounts: ${uniqueAccounts}\n\n`;
@@ -1670,7 +1522,7 @@ bot.onText(/\/confirm_import/, async (msg) => {
 
         await bot.deleteMessage(msg.chat.id, processingMsg.message_id);
         await bot.sendMessage(msg.chat.id, statusMsg);
-        
+
         global._pendingImport = null;
 
     } catch (err) {
@@ -1701,7 +1553,7 @@ bot.on("message", async (msg) => {
     if (!collecting) return;
     if (!msg.text) return;
     if (msg.text.startsWith("/")) return;
-    
+
     await processMessage(msg);
 });
 

@@ -110,6 +110,7 @@ recordSchema.index({ developer: 1 });
 recordSchema.index({ receptionist: 1 });
 recordSchema.index({ senderName: 1 });
 recordSchema.index({ createdAt: -1 });
+recordSchema.index({ collectedAt: -1, _id: 1 });
 
 const Record = mongoose.model('Record', recordSchema);
 

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Import Data — Admin Panel</title>
+<style>
+    :root {
+        --bg: #090d16;
+        --surface: #121824;
+        --border: rgba(255,255,255,0.08);
+        --text: #f3f4f6;
+        --muted: #9ca3af;
+        --primary: #3b82f6;
+        --success: #10b981;
+        --danger: #ef4444;
+        --warning: #f59e0b;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        padding: 30px 20px;
+        min-height: 100vh;
+    }
+    .container { max-width: 1100px; margin: 0 auto; }
+
+    .navbar {
+        background: var(--surface);
+        padding: 18px 28px;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+    .navbar h2 { font-size: 20px; font-weight: 700; }
+    .navbar .nav-right { display:flex; gap:12px; align-items:center; }
+    .back-link {
+        color: var(--muted);
+        text-decoration: none;
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        transition: all 0.2s;
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .back-link:hover { color:#fff; background: rgba(255,255,255,0.03); border-color: var(--border); }
+
+    .card {
+        background: var(--surface);
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        padding: 28px;
+        margin-bottom: 24px;
+    }
+    .card h3 {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 16px;
+    }
+
+    /* Dropzone */
+    .dropzone {
+        border: 2px dashed var(--border);
+        border-radius: 14px;
+        padding: 60px 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: rgba(0,0,0,0.1);
+    }
+    .dropzone:hover, .dropzone.dragover {
+        border-color: var(--primary);
+        background: rgba(59,130,246,0.05);
+    }
+    .dropzone .icon { font-size: 48px; margin-bottom: 12px; filter: grayscale(0.3); }
+    .dropzone .title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    .dropzone .subtitle { color: var(--muted); font-size: 13px; }
+
+    .file-info {
+        display: none;
+        margin-top: 16px;
+        padding: 14px 18px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--border);
+        font-size: 14px;
+    }
+    .file-info.show { display: block; }
+    .file-info strong { color: #fff; }
+
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s;
+    }
+    .btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.1); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform:none; }
+    .btn-primary { background: var(--primary); }
+    .btn-success { background: var(--success); }
+    .btn-danger { background: var(--danger); }
+    .btn-secondary { background: #64748b; }
+
+    .actions { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
+
+    /* Progress bar */
+    .progress {
+        display: none;
+        margin-top: 16px;
+        height: 8px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .progress.show { display: block; }
+    .progress-bar {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--primary), #8b5cf6);
+        transition: width 0.2s;
+    }
+    .progress-text {
+        display: none;
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--muted);
+        text-align: center;
+    }
+    .progress-text.show { display: block; }
+
+    /* Preview table */
+    .preview-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    .preview-table th, .preview-table td {
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+    }
+    .preview-table th {
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .preview-table td { color: #e5e7eb; }
+
+    /* Stats grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+    }
+    .stat-box {
+        background: rgba(0,0,0,0.15);
+        padding: 16px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+    }
+    .stat-box span {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 6px;
+    }
+    .stat-box strong { font-size: 22px; font-weight: 700; }
+
+    /* Toast */
+    .toast {
+        position: fixed;
+        top: 24px;
+        right: 24px;
+        padding: 14px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 14px;
+        color: white;
+        z-index: 1000;
+        display: none;
+        animation: slideIn 0.3s ease;
+    }
+    .toast.show { display: block; }
+    .toast.success { background: var(--success); }
+    .toast.error { background: var(--danger); }
+    .toast.info { background: var(--primary); }
+    @keyframes slideIn {
+        from { transform: translateX(30px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+</style>
+</head>
+<body>
+<div class="container">
+    <nav class="navbar">
+        <h2>📥 Import Data</h2>
+        <div class="nav-right">
+            <a href="/dashboard" class="back-link">← Dashboard</a>
+            <a href="/records" class="back-link">📋 All Records</a>
+        </div>
+    </nav>
+
+    <div class="card">
+        <h3>Step 1 — Select a Telegram/iMe JSON export</h3>
+        <div class="dropzone" id="dropzone">
+            <div class="icon">📄</div>
+            <div class="title">Drop your <code>result.json</code> here</div>
+            <div class="subtitle">or click to browse • supports files up to 200 MB</div>
+        </div>
+        <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
+
+        <div class="file-info" id="fileInfo">
+            <strong>Selected file:</strong> <span id="fileName"></span>
+            <span style="color:var(--muted); margin-left: 8px;">(<span id="fileSize"></span>)</span>
+        </div>
+
+        <div class="progress" id="progress">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div class="progress-text" id="progressText"></div>
+
+        <div class="actions">
+            <button class="btn btn-primary" id="analyzeBtn" disabled>🔍 Analyze File</button>
+            <button class="btn btn-secondary" id="cancelBtn" disabled>Cancel</button>
+        </div>
+    </div>
+
+    <div class="card" id="previewCard" style="display:none;">
+        <h3>Step 2 — Review & Confirm</h3>
+        <p style="color:var(--muted); font-size: 14px; margin-bottom: 12px;">
+            Found <strong id="totalFound" style="color:#fff;"></strong> valid lead records.
+            Showing first <span id="previewCount"></span>.
+        </p>
+
+        <div style="overflow-x:auto;">
+            <table class="preview-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>WS 账号</th>
+                        <th>平台账号</th>
+                        <th>进粉日期</th>
+                        <th>推送后端</th>
+                        <th>Sender</th>
+                    </tr>
+                </thead>
+                <tbody id="previewBody"></tbody>
+            </table>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-success" id="confirmBtn">✅ Confirm Import</button>
+            <button class="btn btn-danger" id="discardBtn">✖ Discard</button>
+        </div>
+    </div>
+
+    <div class="card" id="resultCard" style="display:none;">
+        <h3>📊 Import Result</h3>
+        <div class="stats-grid">
+            <div class="stat-box"><span>Total Processed</span><strong id="rTotal">0</strong></div>
+            <div class="stat-box"><span style="color:#34d399;">✅ Imported</span><strong id="rImported" style="color:#34d399;">0</strong></div>
+            <div class="stat-box"><span style="color:#fbbf24;">⚠️ Duplicates</span><strong id="rDuplicates" style="color:#fbbf24;">0</strong></div>
+            <div class="stat-box"><span style="color:#f87171;">❌ Errors</span><strong id="rErrors" style="color:#f87171;">0</strong></div>
+        </div>
+        <div class="actions">
+            <a href="/dashboard" class="btn btn-primary">← Back to Dashboard</a>
+            <button class="btn btn-secondary" id="importAnotherBtn">📥 Import Another File</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function() {
+    'use strict';
+
+    const dropzone     = document.getElementById('dropzone');
+    const fileInput    = document.getElementById('fileInput');
+    const fileInfo     = document.getElementById('fileInfo');
+    const fileNameEl   = document.getElementById('fileName');
+    const fileSizeEl   = document.getElementById('fileSize');
+    const analyzeBtn   = document.getElementById('analyzeBtn');
+    const cancelBtn    = document.getElementById('cancelBtn');
+    const previewCard  = document.getElementById('previewCard');
+    const previewBody  = document.getElementById('previewBody');
+    const totalFoundEl = document.getElementById('totalFound');
+    const previewCount = document.getElementById('previewCount');
+    const confirmBtn   = document.getElementById('confirmBtn');
+    const discardBtn   = document.getElementById('discardBtn');
+    const resultCard   = document.getElementById('resultCard');
+    const progress     = document.getElementById('progress');
+    const progressBar  = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const toast        = document.getElementById('toast');
+
+    let selectedFile = null;
+    let parsedRecords = null;
+
+    function showToast(msg, type = 'info', duration = 4000) {
+        toast.textContent = msg;
+        toast.className = 'toast show ' + type;
+        setTimeout(() => toast.classList.remove('show'), duration);
+    }
+
+    function formatBytes(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    }
+
+    // ---------- Dropzone ----------
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) handleFile(e.target.files[0]);
+    });
+
+    function handleFile(file) {
+        if (!file.name.toLowerCase().endsWith('.json')) {
+            return showToast('❌ Only .json files are supported', 'error');
+        }
+        if (file.size > 200 * 1024 * 1024) {
+            return showToast('❌ File too large. Maximum 200 MB.', 'error');
+        }
+        selectedFile = file;
+        fileNameEl.textContent = file.name;
+        fileSizeEl.textContent = formatBytes(file.size);
+        fileInfo.classList.add('show');
+        analyzeBtn.disabled = false;
+        previewCard.style.display = 'none';
+        resultCard.style.display = 'none';
+    }
+
+    // ---------- Analyze (preview) ----------
+    analyzeBtn.addEventListener('click', async () => {
+        if (!selectedFile) return;
+        analyzeBtn.disabled = true;
+        cancelBtn.disabled = false;
+        progress.classList.add('show');
+        progressText.classList.add('show');
+        progressBar.style.width = '0%';
+        progressText.textContent = 'Uploading file to server...';
+
+        const formData = new FormData();
+        formData.append('jsonFile', selectedFile);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/import/json');
+
+        xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+                const pct = Math.round((e.loaded / e.total) * 100);
+                progressBar.style.width = pct + '%';
+                progressText.textContent = `Uploading: ${pct}% (${formatBytes(e.loaded)} / ${formatBytes(e.total)})`;
+            }
+        };
+
+        xhr.onload = () => {
+            cancelBtn.disabled = true;
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    progressText.textContent = '✅ Analysis complete';
+                    progressBar.style.width = '100%';
+                    parsedRecords = data.records || data.preview || [];
+                    totalFoundEl.textContent = data.total;
+                    previewCount.textContent = parsedRecords.length;
+                    renderPreview(parsedRecords.slice(0, 5)); 
+                    previewCard.style.display = 'block';
+                    showToast(`✅ Found ${data.total} records`, 'success');
+                } catch (err) {
+                    showToast('❌ Bad response from server', 'error');
+                    progressText.textContent = 'Failed to parse server response';
+                }
+            } else {
+                let msg = `HTTP ${xhr.status}`;
+                try {
+                    const err = JSON.parse(xhr.responseText);
+                    msg = err.error || msg;
+                } catch(e) {}
+                showToast('❌ ' + msg, 'error', 6000);
+                progressText.textContent = '❌ ' + msg;
+            }
+            setTimeout(() => {
+                progress.classList.remove('show');
+                progressText.classList.remove('show');
+            }, 2500);
+            analyzeBtn.disabled = false;
+        };
+
+        xhr.onerror = () => {
+            showToast('❌ Network error during upload', 'error');
+            analyzeBtn.disabled = false;
+            cancelBtn.disabled = true;
+            progress.classList.remove('show');
+            progressText.classList.remove('show');
+        };
+
+        xhr.onabort = () => {
+            showToast('⏹️ Upload cancelled', 'info');
+            analyzeBtn.disabled = false;
+            cancelBtn.disabled = true;
+            progress.classList.remove('show');
+            progressText.classList.remove('show');
+        };
+
+        xhr.send(formData);
+        cancelBtn.onclick = () => xhr.abort();
+    });
+
+    function renderPreview(records) {
+        if (!records || records.length === 0) {
+            previewBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#9ca3af;">No preview available</td></tr>';
+            return;
+        }
+        previewBody.innerHTML = records.map((r, i) => `
+            <tr>
+                <td>${i + 1}</td>
+                <td><strong>${r.wsAccount || '—'}</strong></td>
+                <td style="color:#60a5fa;">${r.platformAccount || '—'}</td>
+                <td>${r.joinDate || '—'}</td>
+                <td>${r.receptionist || '—'}</td>
+                <td>${r.senderName || '—'}</td>
+            </tr>
+        `).join('');
+    }
+
+    // ---------- Confirm import ----------
+    confirmBtn.addEventListener('click', async () => {
+        if (!parsedRecords || parsedRecords.length === 0) {
+            return showToast('❌ No records to import', 'error');
+        }
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = '⏳ Importing...';
+
+        try {
+            const res = await fetch('/api/import/confirm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ records: parsedRecords })
+            });
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || 'Import failed');
+            }
+
+            document.getElementById('rTotal').textContent      = data.stats.total;
+            document.getElementById('rImported').textContent   = data.stats.imported;
+            document.getElementById('rDuplicates').textContent = data.stats.duplicates;
+            document.getElementById('rErrors').textContent     = data.stats.errors;
+
+            previewCard.style.display = 'none';
+            resultCard.style.display = 'block';
+            showToast('✅ Import complete!', 'success');
+        } catch (err) {
+            showToast('❌ ' + err.message, 'error', 6000);
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = '✅ Confirm Import';
+        }
+    });
+
+    discardBtn.addEventListener('click', () => {
+        previewCard.style.display = 'none';
+        selectedFile = null;
+        parsedRecords = null;
+        fileInput.value = '';
+        fileInfo.classList.remove('show');
+        analyzeBtn.disabled = true;
+    });
+
+    document.getElementById('importAnotherBtn').addEventListener('click', () => {
+        resultCard.style.display = 'none';
+        selectedFile = null;
+        parsedRecords = null;
+        fileInput.value = '';
+        fileInfo.classList.remove('show');
+        analyzeBtn.disabled = true;
+    });
+
+})();
+</script>
+</body>
+</html>
